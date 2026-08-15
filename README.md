@@ -1,8 +1,8 @@
 # GoreeCloud Calendar
 
-GoreeCloud Calendar is a native, privacy-first, multi-user calendar web application built for the GoreeCloud platform with the Glaze UI Design Language.
+GoreeCloud Calendar is a native, privacy-first, multi-user calendar web application built for the GoreeCloud platform with the **Glaze UI Design Language**.
 
-**Project status:** Active development — hardened native Docker foundation. Not approved for production use.
+**Project status:** Active development — hardened native Docker and Glaze UI web foundation. Not approved for production use.
 
 ## Architecture
 
@@ -15,25 +15,59 @@ GoreeCloud Calendar is a native, privacy-first, multi-user calendar web applicat
 
 GoreeCloud Calendar authenticates each user against Radicale and performs CalDAV operations using that individual identity. Radicale remains authoritative for calendar collections and `.ics` event resources.
 
-## Current capabilities
+## Web experience
 
-- Individual Radicale-backed login
-- Opaque HttpOnly SameSite sessions
-- Absolute and idle session expiry with per-user/global session caps
-- Bounded login-abuse throttling without retaining plaintext usernames in the limiter
-- Per-session CSRF token for state-changing operations
-- Per-user CalDAV calendar discovery and authorization checks
-- Bounded date-range queries
-- Month calendar with selectable calendars, Today/month navigation, keyboard shortcuts, and Radicale calendar colors when available
-- Recurring-series expansion for read-only occurrence display
-- Controlled event creation, update, and deletion when the write gate is enabled
-- `If-None-Match: *` on create and ETag `If-Match` protection on update/delete
-- Recurring-series and occurrence writes intentionally blocked pending interoperability validation
-- Responsive, dependency-free Glaze UI with light/dark/system appearance
-- Liveness and readiness endpoints
-- Production configuration validation that fails closed for unsafe DAV/cookie/trusted-host settings
-- Docker hardening: non-root runtime, capability drop, `no-new-privileges`, read-only filesystem, loopback-only development port
-- CI for dependency consistency, Python tests, JavaScript syntax, frontend dependency isolation, Docker build, non-root image validation, and hardened runtime smoke testing
+The browser application is intentionally built as a GoreeCloud product rather than a default framework interface. The frontend separates shared Glaze UI foundations from Calendar-specific composition:
+
+- `frontend/glaze.css` — shared Glaze design tokens, surfaces, controls, fields, theme architecture, focus behavior, motion, and accessibility fallbacks.
+- `frontend/styles.css` — Calendar-specific shell, navigation, month grid, schedule view, event presentation, context rail, dialogs, and responsive behavior.
+- `frontend/app.js` — dependency-free same-origin browser behavior and Calendar interactions.
+
+Current web capabilities include:
+
+- Month view with selectable calendars, Today/month navigation, current-day emphasis, keyboard-accessible events, and Radicale calendar colors when available.
+- Schedule view with date-grouped events, time, calendar, location, and recurrence context.
+- Local search across the events already loaded into the current view; search text is not sent to a third-party service.
+- Wide-screen Today and Coming Up context rail.
+- Explicit Select All/Clear calendar controls and per-calendar loaded-view counts.
+- Responsive desktop, tablet, and mobile interaction models rather than a desktop layout that merely shrinks.
+- Mobile calendar-navigation overlay and dedicated Today/Calendars/New quick-action bar.
+- Glaze UI loading, empty, error, confirmation, connection-status, and toast feedback.
+- System, light, and dark appearance modes.
+- Reduced-motion and reduced-transparency operating-system preference support.
+- Keyboard shortcuts: `/` search, `N` new event, `T` Today, and left/right arrows for month navigation.
+- No external browser scripts, stylesheets, fonts, analytics, trackers, advertising SDKs, or CDN dependencies.
+
+See `docs/glaze-ui.md` for the web design-system implementation boundary.
+
+## Application and security capabilities
+
+- Individual Radicale-backed login.
+- Opaque HttpOnly SameSite sessions.
+- Absolute and idle session expiry with per-user/global session caps.
+- Bounded login-abuse throttling without retaining plaintext usernames in the limiter.
+- Per-session CSRF token for state-changing operations.
+- Per-user CalDAV calendar discovery and authorization checks.
+- Bounded date-range queries.
+- Recurring-series expansion for read-only occurrence display.
+- Controlled event creation, update, and deletion when the write gate is enabled.
+- `If-None-Match: *` on create and ETag `If-Match` protection on update/delete.
+- Recurring-series and occurrence writes intentionally blocked pending interoperability validation.
+- Liveness and readiness endpoints.
+- Production configuration validation that fails closed for unsafe DAV/cookie/trusted-host settings.
+- Docker hardening: non-root runtime, capability drop, `no-new-privileges`, read-only filesystem, loopback-only development port.
+
+## Validation
+
+CI validates all three major boundaries:
+
+- **Backend:** dependency installation, dependency consistency, Python compilation, and pytest.
+- **Frontend:** JavaScript syntax and `scripts/validate_frontend.py` Glaze UI structural validation.
+- **Docker:** image build, non-root image user, and hardened read-only/capability-dropped/no-new-privileges runtime smoke test.
+
+The Glaze UI validator checks required shared layers and controls, unique IDs, explicit button types, browser dependency isolation, theme architecture, reduced motion/transparency, adaptive mobile structure, Schedule/search behavior, safe DOM-construction rules, and consistency between JavaScript element references and HTML IDs.
+
+Structural validation complements rather than replaces visual acceptance in representative browsers, themes, viewports, keyboard-only use, assistive technology, and touch devices.
 
 ## Local Docker development
 
@@ -68,7 +102,7 @@ This repository is not production-approved. Before production use, validate at m
 - monitoring and health-check integration;
 - production Caddy, DNS, NetBird, firewall, and port boundaries;
 - recurring-series/occurrence write semantics if those features are enabled later;
-- Glaze UI accessibility and supported-browser acceptance;
+- representative Glaze UI visual, accessibility, touch, and supported-browser acceptance;
 - reproducible transitive dependency locking before Stable release.
 
-See `docs/architecture.md`, `docs/dependencies.md`, and `SECURITY.md`.
+See `docs/architecture.md`, `docs/dependencies.md`, `docs/glaze-ui.md`, and `SECURITY.md`.
