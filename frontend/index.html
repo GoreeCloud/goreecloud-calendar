@@ -45,7 +45,7 @@
         </div>
       </div>
       <div class="top-actions">
-        <span id="syncState" class="status-pill">Connected</span>
+        <span id="syncState" class="status-pill" role="status" aria-live="polite">Connected</span>
         <button id="themeButton" class="icon-button" type="button" aria-label="Toggle appearance">◐</button>
         <button id="logoutButton" class="secondary-button" type="button">Sign out</button>
       </div>
@@ -56,13 +56,18 @@
       <section>
         <div class="section-heading">
           <h2>My calendars</h2>
-          <button id="refreshButton" class="icon-button" type="button" aria-label="Refresh calendars">↻</button>
+          <div class="mini-actions">
+            <button id="selectAllButton" class="text-button" type="button">All</button>
+            <button id="selectNoneButton" class="text-button" type="button">None</button>
+            <button id="refreshButton" class="icon-button" type="button" aria-label="Refresh calendars">↻</button>
+          </div>
         </div>
         <div id="calendarList" class="calendar-list"></div>
       </section>
       <section class="sidebar-note">
         <strong>Private by design</strong>
         <span>Calendar data remains authoritative in Radicale through CalDAV.</span>
+        <span class="shortcut-note">Keyboard: N new event · T today · ←/→ month</span>
       </section>
     </aside>
 

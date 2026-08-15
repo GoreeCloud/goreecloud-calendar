@@ -2,6 +2,7 @@ const state = {
   session: null,
   calendars: [],
   selected: new Set(),
+  selectionInitialized: false,
   events: [],
   month: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
   editing: null,
@@ -25,6 +26,8 @@ const elements = {
   nextButton: $("nextButton"),
   todayButton: $("todayButton"),
   refreshButton: $("refreshButton"),
+  selectAllButton: $("selectAllButton"),
+  selectNoneButton: $("selectNoneButton"),
   newEventButton: $("newEventButton"),
   syncState: $("syncState"),
   emptyState: $("emptyState"),
@@ -87,6 +90,7 @@ function showLogin() {
   state.session = null;
   state.calendars = [];
   state.selected.clear();
+  state.selectionInitialized = false;
   state.events = [];
   elements.appView.classList.add("hidden");
   elements.loginView.classList.remove("hidden");
@@ -143,22 +147,30 @@ elements.logoutButton.addEventListener("click", async () => {
   showLogin();
 });
 
-function colorClass(index) {
-  return `calendar-color-${Math.max(index, 0) % 6}`;
+const fallbackColors = ["#4767d7", "#7a5ac8", "#248a78", "#c26a3a", "#a54b68", "#557a2b"];
+
+function calendarColor(calendar, index) {
+  const candidate = calendar?.color || "";
+  if (/^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(candidate)) {
+    return candidate.slice(0, 7);
+  }
+  return fallbackColors[Math.max(index, 0) % fallbackColors.length];
 }
 
 async function refreshAll() {
   elements.syncState.textContent = "Syncing";
   try {
     state.calendars = await api("/api/calendars");
-    if (state.selected.size === 0) {
+    if (!state.selectionInitialized) {
       state.calendars.forEach((calendar) => state.selected.add(calendar.href));
+      state.selectionInitialized = true;
     } else {
       const valid = new Set(state.calendars.map((calendar) => calendar.href));
       state.selected = new Set([...state.selected].filter((href) => valid.has(href)));
     }
     renderCalendarList();
     populateCalendarSelect();
+    elements.newEventButton.disabled = !state.session.write_enabled || state.calendars.length === 0;
     await loadEvents();
     elements.syncState.textContent = "Connected";
   } catch (error) {
@@ -169,6 +181,13 @@ async function refreshAll() {
 
 function renderCalendarList() {
   elements.calendarList.replaceChildren();
+  if (state.calendars.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "muted small";
+    empty.textContent = "No calendars are available for this account.";
+    elements.calendarList.append(empty);
+    return;
+  }
   state.calendars.forEach((calendar, index) => {
     const label = document.createElement("label");
     label.className = "calendar-option";
@@ -182,7 +201,7 @@ function renderCalendarList() {
     });
     const dot = document.createElement("span");
     dot.className = "calendar-dot";
-    dot.classList.add(colorClass(index));
+    dot.style.color = calendarColor(calendar, index);
     const name = document.createElement("span");
     name.textContent = calendar.display_name;
     label.append(checkbox, dot, name);
@@ -240,43 +259,41 @@ function renderMonth() {
   for (let i = 0; i < 42; i += 1) {
     const day = new Date(start);
     day.setDate(start.getDate() + i);
-    const cell = document.createElement("button");
-    cell.type = "button";
+    const cell = document.createElement("div");
     cell.className = "day-cell";
     cell.setAttribute("role", "gridcell");
     cell.dataset.date = dateKey(day);
     if (day.getMonth() !== state.month.getMonth()) cell.classList.add("outside-month");
     if (dateKey(day) === todayKey) cell.classList.add("today");
 
-    const number = document.createElement("span");
-    number.className = "day-number";
-    number.textContent = day.getDate();
-    cell.append(number);
+    const dayButton = document.createElement("button");
+    dayButton.type = "button";
+    dayButton.className = "day-number";
+    dayButton.textContent = day.getDate();
+    dayButton.setAttribute(
+      "aria-label",
+      `${day.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" })}${state.session.write_enabled ? "; create event" : ""}`
+    );
+    dayButton.disabled = !state.session.write_enabled;
+    dayButton.addEventListener("click", () => openNewEvent(day));
+    cell.append(dayButton);
 
-    const list = document.createElement("span");
+    const list = document.createElement("div");
     list.className = "event-stack";
     const dayEvents = state.events
       .filter((item) => eventTouchesDay(item, day))
       .sort((a, b) => a.start.localeCompare(b.start));
 
     dayEvents.slice(0, 4).forEach((item) => {
-      const eventButton = document.createElement("span");
+      const eventButton = document.createElement("button");
+      eventButton.type = "button";
       eventButton.className = "event-chip";
       const index = state.calendars.findIndex((calendar) => calendar.href === item.calendar_href);
-      eventButton.classList.add(colorClass(index));
+      eventButton.style.setProperty("--event-color", calendarColor(state.calendars[index], index));
       eventButton.textContent = `${item.recurring ? "↻ " : ""}${item.summary}`;
       eventButton.title = eventTooltip(item);
-      eventButton.tabIndex = 0;
-      eventButton.addEventListener("click", (clickEvent) => {
-        clickEvent.stopPropagation();
-        openEventDialog(item);
-      });
-      eventButton.addEventListener("keydown", (keyEvent) => {
-        if (keyEvent.key === "Enter" || keyEvent.key === " ") {
-          keyEvent.preventDefault();
-          openEventDialog(item);
-        }
-      });
+      eventButton.setAttribute("aria-label", eventTooltip(item));
+      eventButton.addEventListener("click", () => openEventDialog(item));
       list.append(eventButton);
     });
 
@@ -287,11 +304,6 @@ function renderMonth() {
       list.append(more);
     }
     cell.append(list);
-
-    cell.addEventListener("click", () => {
-      if (!state.session.write_enabled) return;
-      openNewEvent(day);
-    });
     elements.calendarGrid.append(cell);
   }
 
@@ -381,9 +393,12 @@ function openEventDialog(event) {
 
   const readOnly = !state.session.write_enabled || event.recurring;
   elements.saveEventButton.disabled = readOnly;
-  elements.deleteEventButton.classList.toggle("hidden", !state.session.write_enabled || !event.etag);
+  elements.deleteEventButton.classList.toggle(
+    "hidden",
+    !state.session.write_enabled || !event.etag || event.recurring
+  );
   elements.eventWarning.textContent = event.recurring
-    ? "Recurring-event editing is intentionally read-only in this foundation release. Deleting the series is still available when writes are enabled."
+    ? "This is an occurrence from a recurring series. Series and occurrence editing are intentionally read-only until recurrence write semantics are fully validated."
     : (!state.session.write_enabled ? "CalDAV writes are disabled by the safety gate." : "");
   elements.eventWarning.classList.toggle("hidden", !elements.eventWarning.textContent);
   elements.eventError.textContent = "";
@@ -475,6 +490,18 @@ elements.closeDialogButton.addEventListener("click", () => elements.eventDialog.
 elements.cancelEventButton.addEventListener("click", () => elements.eventDialog.close());
 elements.newEventButton.addEventListener("click", () => openNewEvent());
 elements.refreshButton.addEventListener("click", refreshAll);
+
+elements.selectAllButton.addEventListener("click", async () => {
+  state.calendars.forEach((calendar) => state.selected.add(calendar.href));
+  renderCalendarList();
+  await loadEvents();
+});
+
+elements.selectNoneButton.addEventListener("click", async () => {
+  state.selected.clear();
+  renderCalendarList();
+  await loadEvents();
+});
 elements.todayButton.addEventListener("click", async () => {
   state.month = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
   await loadEvents();
@@ -495,6 +522,29 @@ elements.themeButton.addEventListener("click", () => {
   else document.documentElement.dataset.theme = next;
   localStorage.setItem("goreecloud-calendar-theme", next);
   elements.themeButton.title = `Appearance: ${next}`;
+});
+
+document.addEventListener("keydown", async (event) => {
+  if (!state.session || elements.eventDialog.open) return;
+  const target = event.target;
+  if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) return;
+
+  if (event.key.toLowerCase() === "n" && state.session.write_enabled) {
+    event.preventDefault();
+    openNewEvent();
+  } else if (event.key.toLowerCase() === "t") {
+    event.preventDefault();
+    state.month = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    await loadEvents();
+  } else if (event.key === "ArrowLeft") {
+    event.preventDefault();
+    state.month = new Date(state.month.getFullYear(), state.month.getMonth() - 1, 1);
+    await loadEvents();
+  } else if (event.key === "ArrowRight") {
+    event.preventDefault();
+    state.month = new Date(state.month.getFullYear(), state.month.getMonth() + 1, 1);
+    await loadEvents();
+  }
 });
 
 function toast(message) {

@@ -1,8 +1,8 @@
 # GoreeCloud Calendar
 
-GoreeCloud Calendar is a native, privacy-first, multi-user calendar web application built for the GoreeCloud platform.
+GoreeCloud Calendar is a native, privacy-first, multi-user calendar web application built for the GoreeCloud platform with the Glaze UI Design Language.
 
-**Project status:** Active development — native Docker foundation. Not approved for production use.
+**Project status:** Active development — hardened native Docker foundation. Not approved for production use.
 
 ## Architecture
 
@@ -13,23 +13,27 @@ GoreeCloud Calendar is a native, privacy-first, multi-user calendar web applicat
 - Interface: GoreeCloud Glaze UI
 - Deployment model: Docker / Docker Compose
 
-GoreeCloud Calendar authenticates users against Radicale and performs CalDAV operations using the authenticated user's identity. Radicale remains authoritative for calendar collections and event resources.
+GoreeCloud Calendar authenticates each user against Radicale and performs CalDAV operations using that individual identity. Radicale remains authoritative for calendar collections and `.ics` event resources.
 
-## Foundation features
+## Current capabilities
 
 - Individual Radicale-backed login
-- Opaque HttpOnly sessions
+- Opaque HttpOnly SameSite sessions
+- Absolute and idle session expiry with per-user/global session caps
+- Login-abuse throttling without retaining plaintext usernames in the limiter
 - Per-session CSRF token for state-changing operations
-- Per-user CalDAV calendar discovery
-- Month calendar view with selectable calendars
-- Responsive Glaze UI with light/dark/system appearance
-- Event reading over CalDAV
-- Safe event creation, update, and deletion when the write gate is enabled
+- Per-user CalDAV calendar discovery and authorization checks
+- Bounded date-range queries
+- Month calendar with selectable calendars, Today/month navigation, keyboard shortcuts, and Radicale calendar colors when available
+- Recurring-series expansion for read-only occurrence display
+- Controlled event creation, update, and deletion when the write gate is enabled
 - `If-None-Match: *` on create and ETag `If-Match` protection on update/delete
-- Recurring-event visibility with intentionally read-only recurring edits
+- Recurring-series and occurrence writes intentionally blocked pending interoperability validation
+- Responsive, dependency-free Glaze UI with light/dark/system appearance
 - Liveness and readiness endpoints
-- Docker hardening: non-root runtime, capability drop, no-new-privileges, read-only filesystem, loopback-only development port
-- CI for Python tests, JavaScript syntax, frontend dependency isolation, and Docker build
+- Production configuration validation that fails closed for unsafe DAV/cookie/trusted-host settings
+- Docker hardening: non-root runtime, capability drop, `no-new-privileges`, read-only filesystem, loopback-only development port
+- CI for dependency consistency, Python tests, JavaScript syntax, frontend dependency isolation, Docker build, non-root image validation, and hardened runtime smoke testing
 
 ## Local Docker development
 
@@ -40,28 +44,31 @@ docker compose up --build
 
 Open `http://127.0.0.1:8086`.
 
-The example configuration keeps `GOREECLOUD_CALENDAR_CALDAV_WRITE_ENABLED=false`. Use synthetic/test calendars and explicitly enable the gate only when controlled write validation is intended.
+The example configuration keeps `GOREECLOUD_CALENDAR_CALDAV_WRITE_ENABLED=false`. Use synthetic/test calendars and explicitly enable the gate only for controlled write validation.
 
 ## Security and data ownership
 
-The browser does not receive the reusable Radicale password after authentication. The password is held only in backend process memory for the session lifetime. DAV URLs are constrained to the configured DAV origin, and the backend verifies calendar/event resource membership before writes.
+The browser does not receive the reusable Radicale password after authentication. The password remains only in backend process memory for the bounded session lifetime. DAV URLs are constrained to the configured DAV origin, redirects are revalidated, and the backend verifies calendar/event membership before writes.
 
 Do not place real credentials in `.env`, documentation, source code, screenshots, issues, or commits.
+
+## Current operating model
+
+The session store and login limiter are process-local by design, so the approved development runtime uses exactly one application worker. Do not increase the worker count without first implementing and validating a shared session/throttling design.
 
 ## Production-readiness boundary
 
 This repository is not production-approved. Before production use, validate at minimum:
 
-- representative two-user isolation;
-- shared/durable session strategy or an explicitly approved one-worker operating model;
-- HTTPS `Secure` cookie behavior;
-- CSRF behavior through the production Caddy path;
+- representative two-user isolation against the target Radicale instance;
+- HTTPS and `Secure` cookie behavior through the production Caddy path;
 - Radicale `dav.goreecloud.com` runtime migration and client coexistence;
-- backup, restore, rollback, and portability;
-- dependency/container vulnerability evidence;
-- monitoring and health checks;
+- backup, restore, rollback, and portable `.ics` recovery;
+- dependency and container vulnerability evidence;
+- monitoring and health-check integration;
 - production Caddy, DNS, NetBird, firewall, and port boundaries;
-- recurring-event behavior and desired editing semantics;
-- Glaze UI accessibility and browser acceptance.
+- recurring-series/occurrence write semantics if those features are enabled later;
+- Glaze UI accessibility and supported-browser acceptance;
+- reproducible transitive dependency locking before Stable release.
 
-See `docs/architecture.md` and `SECURITY.md`.
+See `docs/architecture.md`, `docs/dependencies.md`, and `SECURITY.md`.

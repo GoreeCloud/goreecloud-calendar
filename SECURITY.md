@@ -2,22 +2,27 @@
 
 GoreeCloud Calendar is under active development and is not yet approved for production use.
 
-## Security model
+## Implemented security boundary
 
 - Radicale remains authoritative for calendar data.
-- Browser sessions are opaque and HttpOnly.
-- Radicale passwords remain server-side in process memory for the session lifetime.
-- State-changing requests require a per-session CSRF token.
-- CalDAV resource URLs are constrained to the configured DAV origin.
-- Event resources must use `.ics` paths and updates must remain within the requested authorized calendar.
-- Event updates and deletes require ETags.
-- Event creation uses `If-None-Match: *`.
+- Browser sessions are opaque, HttpOnly, SameSite=Strict, and required to be Secure in production.
+- Radicale passwords remain only in backend process memory for the bounded session lifetime.
+- Sessions have absolute expiry, idle expiry, a global cap, and a per-user cap.
+- State-changing requests require a separate per-session CSRF token compared in constant time.
+- Failed sign-ins are rate-limited using a process-local limiter keyed by a hash of the normalized username.
+- Production configuration fails closed if CalDAV is not HTTPS, Secure cookies are disabled, trusted hosts are wildcarded, or other security limits are invalid.
+- Calendar query windows are bounded to limit accidental or abusive expansion work.
+- CalDAV resource URLs are constrained to the configured DAV origin, including redirects.
+- Event resources must use `.ics` paths and writes must remain inside an authorized discovered calendar.
+- Event updates and deletes require ETags; creates use `If-None-Match: *`.
 - The CalDAV write gate defaults to disabled.
-- The container drops Linux capabilities, uses `no-new-privileges`, runs as a non-root user, and is read-only at runtime through Compose.
+- Recurring resources are displayable as expanded occurrences but recurring writes remain blocked.
+- The container runs as a non-root user; Compose drops all Linux capabilities, applies `no-new-privileges`, and uses a read-only filesystem.
+- The frontend has no external scripts, styles, fonts, analytics, trackers, or CDN dependencies.
 
 ## Current production blockers
 
-The process-local session store is intentionally a foundation implementation and does not support multiple backend workers or durable session revocation. Recurring-event editing is also intentionally read-only. Production deployment requires representative multi-user isolation testing, login-abuse controls appropriate to the final access path, backup/recovery validation, exact runtime configuration review, dependency and container vulnerability review, Caddy/DNS/NetBird validation, secure-cookie validation under HTTPS, monitoring, and rollback evidence.
+The session store and login limiter are process-local and require the documented single-worker runtime. Production approval still requires representative two-user isolation against Radicale, final Caddy/HTTPS and Secure-cookie verification, backup/restore and rollback evidence, monitoring, dependency and container vulnerability evidence, production DNS/NetBird/firewall review, recurrence-write decisions, and Glaze UI accessibility/browser acceptance.
 
 ## Reporting
 

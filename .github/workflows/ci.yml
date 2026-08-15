@@ -22,9 +22,12 @@ jobs:
       - name: Install backend and tests
         working-directory: backend
         run: python -m pip install ".[test]"
+      - name: Verify dependency consistency
+        working-directory: backend
+        run: python -m pip check
       - name: Compile
         working-directory: backend
-        run: python -m compileall -q app
+        run: python -m compileall -q app tests
       - name: Test
         working-directory: backend
         run: pytest -q
@@ -38,6 +41,12 @@ jobs:
       - name: Assert no external frontend dependencies
         run: |
           ! grep -R -E 'https?://' frontend/index.html frontend/app.js frontend/styles.css
+      - name: Assert required Glaze UI controls exist
+        run: |
+          grep -q 'id="calendarGrid"' frontend/index.html
+          grep -q 'id="eventDialog"' frontend/index.html
+          grep -q 'id="selectAllButton"' frontend/index.html
+          grep -q 'id="themeButton"' frontend/index.html
 
   docker:
     runs-on: ubuntu-latest
@@ -45,3 +54,26 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Build image
         run: docker build --pull=false -t goreecloud-calendar:ci .
+      - name: Verify non-root image user
+        run: test "$(docker image inspect goreecloud-calendar:ci --format '{{.Config.User}}')" = "10001:10001"
+      - name: Smoke-test hardened runtime
+        run: |
+          docker run -d --rm \
+            --name goreecloud-calendar-ci \
+            --read-only \
+            --tmpfs /tmp:size=64m,mode=1777 \
+            --cap-drop ALL \
+            --security-opt no-new-privileges:true \
+            -e GOREECLOUD_CALENDAR_ENVIRONMENT=development \
+            -e GOREECLOUD_CALENDAR_SESSION_COOKIE_SECURE=false \
+            -p 127.0.0.1:18086:8000 \
+            goreecloud-calendar:ci
+          trap 'docker rm -f goreecloud-calendar-ci >/dev/null 2>&1 || true' EXIT
+          for attempt in $(seq 1 20); do
+            if curl --fail --silent http://127.0.0.1:18086/api/health/live >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs goreecloud-calendar-ci
+          exit 1

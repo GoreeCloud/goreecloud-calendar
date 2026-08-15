@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-import os
+from secrets import compare_digest
 
-from fastapi import Cookie, Depends, FastAPI, Header, HTTPException, Response, status
+from fastapi import Cookie, Depends, FastAPI, Header, HTTPException, Request, Response, status
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from .auth_guard import LoginBlocked, LoginRateLimiter
 from .caldav import (
     CalDavAuthenticationError,
     CalDavAuthorizationError,
@@ -18,6 +19,7 @@ from .caldav import (
     CalDavNotFound,
     CalDavSettings,
 )
+from .config import Settings
 from .models import (
     CalendarSummary,
     EventSummary,
@@ -30,57 +32,47 @@ from .session import SessionRecord, SessionStore
 
 
 SERVICE = "goreecloud-calendar"
-ENVIRONMENT = os.getenv("GOREECLOUD_CALENDAR_ENVIRONMENT", "development").strip()
-CALDAV_BASE_URL = os.getenv(
-    "GOREECLOUD_CALENDAR_CALDAV_BASE_URL", "https://dav.goreecloud.com"
-).strip()
-CALDAV_TIMEOUT_SECONDS = float(
-    os.getenv("GOREECLOUD_CALENDAR_CALDAV_TIMEOUT_SECONDS", "15")
-)
-SESSION_TTL_SECONDS = int(
-    os.getenv("GOREECLOUD_CALENDAR_SESSION_TTL_SECONDS", "28800")
-)
-SESSION_COOKIE_SECURE = os.getenv(
-    "GOREECLOUD_CALENDAR_SESSION_COOKIE_SECURE", "true"
-).strip().lower() in {"1", "true", "yes", "on"}
-WRITE_ENABLED = os.getenv(
-    "GOREECLOUD_CALENDAR_CALDAV_WRITE_ENABLED", "false"
-).strip().lower() in {"1", "true", "yes", "on"}
-TRUSTED_HOSTS = [
-    item.strip()
-    for item in os.getenv(
-        "GOREECLOUD_CALENDAR_TRUSTED_HOSTS",
-        "localhost,127.0.0.1,calendar.goreecloud.com",
-    ).split(",")
-    if item.strip()
-]
 COOKIE_NAME = "goreecloud_calendar_session"
-
 STATIC_ROOT = Path(__file__).resolve().parents[2] / "frontend"
+SETTINGS = Settings.from_env()
 
 app = FastAPI(
     title="GoreeCloud Calendar",
-    version="0.1.0",
+    version="0.2.0",
     docs_url=None,
     redoc_url=None,
     openapi_url=None,
 )
-app.add_middleware(TrustedHostMiddleware, allowed_hosts=TRUSTED_HOSTS)
-sessions = SessionStore(SESSION_TTL_SECONDS)
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(SETTINGS.trusted_hosts))
+
+sessions = SessionStore(
+    SETTINGS.session_ttl_seconds,
+    idle_seconds=SETTINGS.session_idle_seconds,
+    max_total=SETTINGS.session_max_total,
+    max_per_user=SETTINGS.session_max_per_user,
+)
+login_limiter = LoginRateLimiter(
+    max_failures=SETTINGS.login_max_failures,
+    window_seconds=SETTINGS.login_window_seconds,
+    lockout_seconds=SETTINGS.login_lockout_seconds,
+)
 dav_settings = CalDavSettings(
-    base_url=CALDAV_BASE_URL,
-    timeout_seconds=CALDAV_TIMEOUT_SECONDS,
+    base_url=SETTINGS.caldav_base_url,
+    timeout_seconds=SETTINGS.caldav_timeout_seconds,
+    max_query_days=SETTINGS.caldav_max_query_days,
 )
 
 
 @app.middleware("http")
-async def security_headers(request, call_next):
+async def security_headers(request: Request, call_next):
     response = await call_next(request)
     response.headers["Cache-Control"] = "no-store, max-age=0"
     response.headers["Pragma"] = "no-cache"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+    response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
     response.headers["Permissions-Policy"] = (
         "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
     )
@@ -96,6 +88,8 @@ async def security_headers(request, call_next):
         "frame-ancestors 'none'; "
         "form-action 'self'"
     )
+    if SETTINGS.environment == "production":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
 
 
@@ -120,7 +114,7 @@ def require_csrf(
     record: SessionRecord = Depends(current_session),
     csrf_token: str | None = Header(default=None, alias="X-CSRF-Token"),
 ) -> SessionRecord:
-    if not csrf_token or csrf_token != record.csrf_token:
+    if not csrf_token or not compare_digest(csrf_token, record.csrf_token):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="CSRF validation failed.",
@@ -129,7 +123,7 @@ def require_csrf(
 
 
 def require_write_enabled() -> None:
-    if not WRITE_ENABLED:
+    if not SETTINGS.write_enabled:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="CalDAV writes are disabled by the GoreeCloud Calendar safety gate.",
@@ -138,7 +132,7 @@ def require_write_enabled() -> None:
 
 def map_dav_error(exc: CalDavError) -> HTTPException:
     if isinstance(exc, CalDavAuthenticationError):
-        return HTTPException(status_code=401, detail=str(exc))
+        return HTTPException(status_code=401, detail="Authentication failed.")
     if isinstance(exc, CalDavAuthorizationError):
         return HTTPException(status_code=403, detail=str(exc))
     if isinstance(exc, CalDavNotFound):
@@ -150,42 +144,59 @@ def map_dav_error(exc: CalDavError) -> HTTPException:
 
 @app.get("/api/health/live", response_model=HealthResponse)
 async def health_live() -> HealthResponse:
-    return HealthResponse(status="ok", service=SERVICE, environment=ENVIRONMENT)
+    return HealthResponse(status="ok", service=SERVICE, environment=SETTINGS.environment)
 
 
 @app.get("/api/health/ready", response_model=HealthResponse)
 async def health_ready() -> HealthResponse:
-    if not CALDAV_BASE_URL:
-        raise HTTPException(status_code=503, detail="CalDAV base URL is not configured.")
-    return HealthResponse(status="ok", service=SERVICE, environment=ENVIRONMENT)
+    # Settings are validated during application import/startup. Readiness is local
+    # process readiness and intentionally does not require a user's DAV credentials.
+    return HealthResponse(status="ok", service=SERVICE, environment=SETTINGS.environment)
 
 
 @app.post("/api/auth/login", response_model=SessionResponse)
 async def login(payload: LoginRequest, response: Response) -> SessionResponse:
+    username = payload.username.strip()
+    try:
+        login_limiter.check(username)
+    except LoginBlocked as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many failed sign-in attempts. Try again later.",
+            headers={"Retry-After": str(exc.retry_after_seconds)},
+        ) from exc
+
     client = CalDavClient(
         dav_settings,
-        username=payload.username,
+        username=username,
         password=payload.password,
     )
     try:
         await client.validate_credentials()
+    except CalDavAuthenticationError as exc:
+        login_limiter.failure(username)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Unable to sign in with those credentials.",
+        ) from exc
     except CalDavError as exc:
         raise map_dav_error(exc) from exc
 
-    record = sessions.create(username=payload.username, password=payload.password)
+    login_limiter.success(username)
+    record = sessions.create(username=username, password=payload.password)
     response.set_cookie(
         COOKIE_NAME,
         record.token,
         httponly=True,
-        secure=SESSION_COOKIE_SECURE,
+        secure=SETTINGS.session_cookie_secure,
         samesite="strict",
-        max_age=SESSION_TTL_SECONDS,
+        max_age=SETTINGS.session_ttl_seconds,
         path="/",
     )
     return SessionResponse(
         username=record.username,
         csrf_token=record.csrf_token,
-        write_enabled=WRITE_ENABLED,
+        write_enabled=SETTINGS.write_enabled,
     )
 
 
@@ -194,7 +205,7 @@ async def auth_me(record: SessionRecord = Depends(current_session)) -> SessionRe
     return SessionResponse(
         username=record.username,
         csrf_token=record.csrf_token,
-        write_enabled=WRITE_ENABLED,
+        write_enabled=SETTINGS.write_enabled,
     )
 
 
@@ -204,8 +215,15 @@ async def logout(
     record: SessionRecord = Depends(require_csrf),
     session_token: str | None = Cookie(default=None, alias=COOKIE_NAME),
 ) -> Response:
+    del record
     sessions.delete(session_token)
-    response.delete_cookie(COOKIE_NAME, path="/")
+    response.delete_cookie(
+        COOKIE_NAME,
+        path="/",
+        secure=SETTINGS.session_cookie_secure,
+        httponly=True,
+        samesite="strict",
+    )
     response.status_code = 204
     return response
 

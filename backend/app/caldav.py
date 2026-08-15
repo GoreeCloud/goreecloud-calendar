@@ -8,6 +8,7 @@ from uuid import uuid4
 import xml.etree.ElementTree as ET
 
 import httpx
+import recurring_ical_events
 from icalendar import Calendar as ICalendar
 from icalendar import Event as IEvent
 
@@ -44,6 +45,7 @@ class CalDavNotFound(CalDavError):
 class CalDavSettings:
     base_url: str
     timeout_seconds: float
+    max_query_days: int = 62
 
 
 class CalDavClient:
@@ -293,6 +295,10 @@ class CalDavClient:
             raise ValueError("Calendar query range must be timezone-aware.")
         if end <= start:
             raise ValueError("Calendar query end must be after start.")
+        if end - start > timedelta(days=self.settings.max_query_days):
+            raise ValueError(
+                f"Calendar query range cannot exceed {self.settings.max_query_days} days."
+            )
 
         calendar_url = await self._assert_calendar_access(calendar_href)
         start_utc = start.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -330,7 +336,11 @@ class CalDavClient:
             except Exception as exc:
                 raise CalDavError("CalDAV returned invalid iCalendar data.") from exc
 
-            for component in parsed.walk("VEVENT"):
+            components, series_recurring = self._expand_components(
+                parsed, start=start, end=end
+            )
+
+            for component in components:
                 events.append(
                     self._event_summary(
                         component,
@@ -341,9 +351,30 @@ class CalDavClient:
                             else None
                         ),
                         calendar_href=self._canonical_path(calendar_href),
+                        recurring=series_recurring,
                     )
                 )
         return events
+
+    @staticmethod
+    def _expand_components(
+        parsed: ICalendar,
+        *,
+        start: datetime,
+        end: datetime,
+    ) -> tuple[list[IEvent], bool]:
+        source_events = parsed.walk("VEVENT")
+        series_recurring = any(
+            component.get("RRULE") is not None
+            or component.get("RDATE") is not None
+            or component.get("RECURRENCE-ID") is not None
+            for component in source_events
+        )
+        try:
+            components = list(recurring_ical_events.of(parsed).between(start, end))
+        except Exception as exc:
+            raise CalDavError("Unable to expand recurring iCalendar data safely.") from exc
+        return components, series_recurring
 
     @staticmethod
     def _serialize_dt(value: object) -> tuple[str, bool]:
@@ -362,6 +393,7 @@ class CalDavClient:
         href: str,
         etag: str | None,
         calendar_href: str,
+        recurring: bool | None = None,
     ) -> EventSummary:
         dtstart = component.decoded("DTSTART", None)
         if dtstart is None:
@@ -391,7 +423,13 @@ class CalDavClient:
             start=start,
             end=end,
             all_day=all_day,
-            recurring=component.get("RRULE") is not None,
+            recurring=(
+                recurring
+                if recurring is not None
+                else component.get("RRULE") is not None
+                or component.get("RDATE") is not None
+                or component.get("RECURRENCE-ID") is not None
+            ),
         )
 
     async def create_event(self, payload: EventWriteRequest) -> EventSummary:
