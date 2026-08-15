@@ -101,3 +101,13 @@ def test_calendar_query_range_rejects_oversized_window():
 
     with pytest.raises(ValueError, match="cannot exceed"):
         asyncio.run(dav.list_events("/person/calendar/", start=start, end=end))
+
+
+def test_recurring_resource_is_blocked_for_writes():
+    from app.caldav import CalDavConflict
+
+    calendar = ICalendar.from_ical(
+        b"""BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:series\r\nDTSTART:20260801T140000Z\r\nRRULE:FREQ=DAILY;COUNT=2\r\nSUMMARY:Series\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"""
+    )
+    with pytest.raises(CalDavConflict, match="Recurring-event writes"):
+        client()._assert_nonrecurring_resource(calendar)

@@ -25,3 +25,9 @@ def test_session_idle_timeout_cannot_exceed_ttl(monkeypatch):
 
     with pytest.raises(RuntimeError, match="idle timeout"):
         Settings.from_env()
+
+
+def test_login_identity_limit_must_be_positive(monkeypatch):
+    monkeypatch.setenv("GOREECLOUD_CALENDAR_LOGIN_MAX_IDENTITIES", "0")
+    with pytest.raises(RuntimeError, match="login max identities"):
+        Settings.from_env()

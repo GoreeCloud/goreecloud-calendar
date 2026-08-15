@@ -39,6 +39,7 @@ class Settings:
     login_max_failures: int
     login_window_seconds: int
     login_lockout_seconds: int
+    login_max_identities: int
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -69,6 +70,7 @@ class Settings:
             login_max_failures=_int_env("GOREECLOUD_CALENDAR_LOGIN_MAX_FAILURES", 8),
             login_window_seconds=_int_env("GOREECLOUD_CALENDAR_LOGIN_WINDOW_SECONDS", 300),
             login_lockout_seconds=_int_env("GOREECLOUD_CALENDAR_LOGIN_LOCKOUT_SECONDS", 900),
+            login_max_identities=_int_env("GOREECLOUD_CALENDAR_LOGIN_MAX_IDENTITIES", 1000),
         )
         settings.validate()
         return settings
@@ -95,6 +97,7 @@ class Settings:
             "login max failures": self.login_max_failures,
             "login window": self.login_window_seconds,
             "login lockout": self.login_lockout_seconds,
+            "login max identities": self.login_max_identities,
         }
         for label, value in numeric_positive.items():
             if value <= 0:

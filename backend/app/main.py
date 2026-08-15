@@ -55,6 +55,7 @@ login_limiter = LoginRateLimiter(
     max_failures=SETTINGS.login_max_failures,
     window_seconds=SETTINGS.login_window_seconds,
     lockout_seconds=SETTINGS.login_lockout_seconds,
+    max_identities=SETTINGS.login_max_identities,
 )
 dav_settings = CalDavSettings(
     base_url=SETTINGS.caldav_base_url,

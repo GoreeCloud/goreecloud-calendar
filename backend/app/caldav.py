@@ -459,6 +459,25 @@ class CalDavClient:
             calendar_href=self._canonical_path(payload.calendar_href),
         )
 
+    @staticmethod
+    def _assert_nonrecurring_resource(calendar: ICalendar) -> IEvent:
+        components = calendar.walk("VEVENT")
+        if len(components) != 1:
+            raise CalDavConflict(
+                "Multi-component calendar resources are read-only in this release."
+            )
+        event = components[0]
+        if (
+            event.get("RRULE") is not None
+            or event.get("RDATE") is not None
+            or event.get("RECURRENCE-ID") is not None
+            or event.get("EXDATE") is not None
+        ):
+            raise CalDavConflict(
+                "Recurring-event writes are not enabled in this release."
+            )
+        return event
+
     async def update_event(
         self,
         event_href: str,
@@ -480,15 +499,7 @@ class CalDavClient:
         except Exception as exc:
             raise CalDavError("Stored event contains invalid iCalendar data.") from exc
 
-        components = calendar.walk("VEVENT")
-        if not components:
-            raise CalDavError("Stored resource contains no VEVENT.")
-        event = components[0]
-        if event.get("RRULE") is not None:
-            raise CalDavConflict(
-                "Recurring-event editing is not enabled in this foundation release."
-            )
-
+        event = self._assert_nonrecurring_resource(calendar)
         self._apply_write_fields(event, payload)
         response = await self._request(
             "PUT",
@@ -508,6 +519,12 @@ class CalDavClient:
         if not etag.strip():
             raise CalDavConflict("An ETag is required to delete an event.")
         resource_url = await self._assert_event_access(event_href)
+        existing = await self._request("GET", resource_url)
+        try:
+            calendar = ICalendar.from_ical(existing.content)
+        except Exception as exc:
+            raise CalDavError("Stored event contains invalid iCalendar data.") from exc
+        self._assert_nonrecurring_resource(calendar)
         await self._request(
             "DELETE",
             resource_url,

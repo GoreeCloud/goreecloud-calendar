@@ -19,3 +19,16 @@ def test_login_limiter_success_clears_failures():
     limiter.failure("person")
     limiter.success("person")
     limiter.check("person")
+
+
+def test_login_limiter_bounds_identity_table():
+    limiter = LoginRateLimiter(
+        max_failures=3,
+        window_seconds=60,
+        lockout_seconds=120,
+        max_identities=2,
+    )
+    limiter.failure("one")
+    limiter.failure("two")
+    limiter.failure("three")
+    assert limiter.count() == 2

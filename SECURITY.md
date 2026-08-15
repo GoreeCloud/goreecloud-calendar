@@ -9,7 +9,7 @@ GoreeCloud Calendar is under active development and is not yet approved for prod
 - Radicale passwords remain only in backend process memory for the bounded session lifetime.
 - Sessions have absolute expiry, idle expiry, a global cap, and a per-user cap.
 - State-changing requests require a separate per-session CSRF token compared in constant time.
-- Failed sign-ins are rate-limited using a process-local limiter keyed by a hash of the normalized username.
+- Failed sign-ins are rate-limited using a bounded process-local limiter keyed by a hash of the normalized username.
 - Production configuration fails closed if CalDAV is not HTTPS, Secure cookies are disabled, trusted hosts are wildcarded, or other security limits are invalid.
 - Calendar query windows are bounded to limit accidental or abusive expansion work.
 - CalDAV resource URLs are constrained to the configured DAV origin, including redirects.

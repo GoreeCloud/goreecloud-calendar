@@ -20,7 +20,7 @@ GoreeCloud Calendar authenticates each user against Radicale and performs CalDAV
 - Individual Radicale-backed login
 - Opaque HttpOnly SameSite sessions
 - Absolute and idle session expiry with per-user/global session caps
-- Login-abuse throttling without retaining plaintext usernames in the limiter
+- Bounded login-abuse throttling without retaining plaintext usernames in the limiter
 - Per-session CSRF token for state-changing operations
 - Per-user CalDAV calendar discovery and authorization checks
 - Bounded date-range queries
