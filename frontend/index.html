@@ -2,150 +2,357 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="light dark">
-  <meta name="theme-color" content="#f7f9fc">
+  <meta name="theme-color" content="#f4f7fb">
+  <meta name="description" content="GoreeCloud Calendar — private, self-hosted calendar access through the GoreeCloud Glaze UI.">
+  <meta name="application-name" content="GoreeCloud Calendar">
   <title>GoreeCloud Calendar</title>
+  <link rel="stylesheet" href="/assets/glaze.css">
   <link rel="stylesheet" href="/assets/styles.css">
   <script defer src="/assets/app.js"></script>
 </head>
 <body>
-  <div class="ambient ambient-one" aria-hidden="true"></div>
-  <div class="ambient ambient-two" aria-hidden="true"></div>
+  <div class="glaze-ambient glaze-ambient-a" aria-hidden="true"></div>
+  <div class="glaze-ambient glaze-ambient-b" aria-hidden="true"></div>
+  <div class="glaze-ambient glaze-ambient-c" aria-hidden="true"></div>
 
   <main id="loginView" class="login-shell">
-    <section class="login-card glaze-panel" aria-labelledby="loginTitle">
-      <div class="brand-mark" aria-hidden="true">G</div>
-      <p class="eyebrow">GoreeCloud</p>
-      <h1 id="loginTitle">Calendar</h1>
-      <p class="muted">Your private calendar, backed by your GoreeCloud DAV service.</p>
-      <form id="loginForm" class="stack">
-        <label>
-          <span>Username</span>
-          <input id="username" name="username" autocomplete="username" required>
-        </label>
-        <label>
-          <span>Password</span>
-          <input id="password" name="password" type="password" autocomplete="current-password" required>
-        </label>
-        <button class="primary-button" type="submit">Sign in</button>
-        <p id="loginError" class="form-error" role="alert"></p>
-      </form>
-      <p class="privacy-note">Credentials are sent only to this application backend and used to authenticate to Radicale. They are not stored in the browser.</p>
+    <section class="login-stage glaze-surface" aria-labelledby="loginTitle">
+      <div class="login-story" aria-hidden="true">
+        <div class="brand-lockup brand-lockup-large">
+          <div class="brand-mark">G</div>
+          <div>
+            <span class="brand-overline">GoreeCloud</span>
+            <strong>Calendar</strong>
+          </div>
+        </div>
+        <div class="login-copy">
+          <span class="glaze-kicker">Private · Self-hosted · Standards-based</span>
+          <h1>Your time, inside your cloud.</h1>
+          <p>Plan days, find events, and stay in sync while Radicale remains the authoritative CalDAV store.</p>
+        </div>
+        <div class="principle-grid">
+          <div class="principle-card">
+            <span class="principle-icon">◌</span>
+            <strong>Private by default</strong>
+            <span>No analytics, trackers, ad SDKs, or third-party browser dependencies.</span>
+          </div>
+          <div class="principle-card">
+            <span class="principle-icon">↔</span>
+            <strong>DAV compatible</strong>
+            <span>Your calendar remains portable and interoperable through CalDAV.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="login-form-panel">
+        <div class="login-form-heading">
+          <span class="glaze-kicker">Welcome back</span>
+          <h2 id="loginTitle">Sign in to Calendar</h2>
+          <p class="glaze-muted">Use your GoreeCloud DAV account.</p>
+        </div>
+        <form id="loginForm" class="glaze-stack" novalidate>
+          <label class="glaze-field">
+            <span>Username</span>
+            <input id="username" name="username" autocomplete="username" required maxlength="254">
+          </label>
+          <label class="glaze-field">
+            <span>Password</span>
+            <input id="password" name="password" type="password" autocomplete="current-password" required maxlength="2048">
+          </label>
+          <button class="glaze-button glaze-button-primary glaze-button-large" type="submit">
+            <span>Sign in</span>
+            <span aria-hidden="true">→</span>
+          </button>
+          <p id="loginError" class="glaze-error" role="alert" aria-live="assertive"></p>
+        </form>
+        <div class="privacy-callout">
+          <span class="privacy-lock" aria-hidden="true">⌁</span>
+          <p>Your password is sent only to this application backend for Radicale authentication and is never stored in browser storage.</p>
+        </div>
+      </div>
     </section>
   </main>
 
   <div id="appView" class="app-shell hidden">
-    <header class="topbar glaze-panel">
-      <div class="brand-row">
-        <div class="brand-mark compact" aria-hidden="true">G</div>
-        <div>
-          <p class="eyebrow">GoreeCloud</p>
-          <h1>Calendar</h1>
+    <header class="app-topbar glaze-surface">
+      <div class="brand-lockup">
+        <div class="brand-mark brand-mark-small">G</div>
+        <div class="brand-copy">
+          <span class="brand-overline">GoreeCloud</span>
+          <strong>Calendar</strong>
         </div>
       </div>
-      <div class="top-actions">
-        <span id="syncState" class="status-pill" role="status" aria-live="polite">Connected</span>
-        <button id="themeButton" class="icon-button" type="button" aria-label="Toggle appearance">◐</button>
-        <button id="logoutButton" class="secondary-button" type="button">Sign out</button>
+
+      <div class="topbar-search">
+        <label class="search-box" for="eventSearch">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.35-4.35m2.35-5.65a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z"/></svg>
+          <input id="eventSearch" type="search" placeholder="Search this view" autocomplete="off" aria-label="Search events in this view">
+          <kbd>/</kbd>
+        </label>
+      </div>
+
+      <div class="topbar-actions">
+        <span id="syncState" class="glaze-status" data-state="ok" role="status" aria-live="polite">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span>Connected</span>
+        </span>
+        <button id="calendarPanelToggle" class="glaze-icon-button mobile-only" type="button" aria-label="Open calendars" aria-controls="calendarPanel" aria-expanded="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h16"/></svg>
+        </button>
+        <button id="themeButton" class="glaze-icon-button" type="button" aria-label="Appearance: system">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z"/></svg>
+        </button>
+        <button id="logoutButton" class="glaze-button glaze-button-secondary topbar-signout" type="button">Sign out</button>
       </div>
     </header>
 
-    <aside class="sidebar glaze-panel">
-      <button id="newEventButton" class="primary-button wide" type="button">+ New event</button>
-      <section>
-        <div class="section-heading">
-          <h2>My calendars</h2>
-          <div class="mini-actions">
-            <button id="selectAllButton" class="text-button" type="button">All</button>
-            <button id="selectNoneButton" class="text-button" type="button">None</button>
-            <button id="refreshButton" class="icon-button" type="button" aria-label="Refresh calendars">↻</button>
-          </div>
+    <aside id="calendarPanel" class="calendar-panel glaze-surface" aria-label="Calendar navigation">
+      <div class="panel-mobile-heading mobile-only">
+        <div>
+          <span class="glaze-kicker">Calendar</span>
+          <h2>Your calendars</h2>
         </div>
-        <div id="calendarList" class="calendar-list"></div>
+        <button id="calendarPanelClose" class="glaze-icon-button" type="button" aria-label="Close calendars">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+
+      <button id="newEventButton" class="glaze-button glaze-button-primary glaze-button-wide new-event-button" type="button">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        <span>New event</span>
+        <kbd>N</kbd>
+      </button>
+
+      <nav class="primary-nav" aria-label="Calendar views">
+        <button id="monthNavButton" class="nav-item is-active" type="button" data-view="month" aria-current="page">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v15H4zM8 3v4M16 3v4M4 9h16"/></svg>
+          <span>Month</span>
+        </button>
+        <button id="scheduleNavButton" class="nav-item" type="button" data-view="schedule">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>
+          <span>Schedule</span>
+        </button>
+      </nav>
+
+      <section class="calendar-section" aria-labelledby="calendarListHeading">
+        <div class="section-heading">
+          <div>
+            <span class="section-label">Collections</span>
+            <h2 id="calendarListHeading">My calendars</h2>
+          </div>
+          <button id="refreshButton" class="glaze-icon-button glaze-icon-button-small" type="button" aria-label="Refresh calendars">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.34 5.66M20 4v7h-7"/></svg>
+          </button>
+        </div>
+        <div class="selection-actions" aria-label="Calendar selection shortcuts">
+          <button id="selectAllButton" class="glaze-text-button" type="button">Select all</button>
+          <span aria-hidden="true">·</span>
+          <button id="selectNoneButton" class="glaze-text-button" type="button">Clear</button>
+        </div>
+        <div id="calendarList" class="calendar-list" aria-live="polite"></div>
       </section>
-      <section class="sidebar-note">
-        <strong>Private by design</strong>
-        <span>Calendar data remains authoritative in Radicale through CalDAV.</span>
-        <span class="shortcut-note">Keyboard: N new event · T today · ←/→ month</span>
+
+      <section class="privacy-card">
+        <div class="privacy-card-icon" aria-hidden="true">⌁</div>
+        <div>
+          <strong>Radicale stays authoritative</strong>
+          <p>Calendar is the Glaze UI application layer. Your CalDAV data remains in GoreeCloud DAV.</p>
+        </div>
       </section>
+
+      <div class="keyboard-hints desktop-only" aria-label="Keyboard shortcuts">
+        <span><kbd>N</kbd> New</span>
+        <span><kbd>T</kbd> Today</span>
+        <span><kbd>←</kbd><kbd>→</kbd> Navigate</span>
+        <span><kbd>/</kbd> Search</span>
+      </div>
     </aside>
 
-    <section class="workspace glaze-panel">
-      <div class="calendar-toolbar">
-        <div class="toolbar-group">
-          <button id="todayButton" class="secondary-button" type="button">Today</button>
-          <button id="prevButton" class="icon-button" type="button" aria-label="Previous month">‹</button>
-          <button id="nextButton" class="icon-button" type="button" aria-label="Next month">›</button>
+    <main class="calendar-workspace">
+      <section class="calendar-surface glaze-surface" aria-labelledby="monthTitle">
+        <div class="calendar-toolbar">
+          <div class="toolbar-left">
+            <button id="todayButton" class="glaze-button glaze-button-secondary" type="button">Today</button>
+            <div class="month-nav" aria-label="Month navigation">
+              <button id="prevButton" class="glaze-icon-button" type="button" aria-label="Previous month">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+              </button>
+              <button id="nextButton" class="glaze-icon-button" type="button" aria-label="Next month">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="toolbar-title">
+            <span id="viewEyebrow" class="glaze-kicker">Month view</span>
+            <h1 id="monthTitle">Calendar</h1>
+          </div>
+
+          <div class="toolbar-right">
+            <div class="view-switcher" role="group" aria-label="Calendar view">
+              <button id="monthViewButton" class="view-switch is-active" type="button" data-view="month" aria-pressed="true">Month</button>
+              <button id="scheduleViewButton" class="view-switch" type="button" data-view="schedule" aria-pressed="false">Schedule</button>
+            </div>
+          </div>
         </div>
-        <h2 id="monthTitle"></h2>
-        <div class="toolbar-group end">
-          <span id="userLabel" class="muted small"></span>
+
+        <div id="monthView" class="month-view">
+          <div class="weekday-row" aria-hidden="true">
+            <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+          </div>
+          <div id="calendarGrid" class="calendar-grid" role="grid" aria-label="Month calendar"></div>
         </div>
-      </div>
-      <div class="weekday-row" aria-hidden="true">
-        <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
-      </div>
-      <div id="calendarGrid" class="calendar-grid" role="grid" aria-label="Month calendar"></div>
-      <div id="emptyState" class="empty-state hidden">
-        <strong>No visible events</strong>
-        <span>Choose a calendar or create an event when writes are enabled.</span>
-      </div>
-    </section>
+
+        <div id="scheduleView" class="schedule-view hidden" aria-label="Schedule view">
+          <div id="scheduleList" class="schedule-list"></div>
+        </div>
+
+        <div id="emptyState" class="empty-state hidden" role="status">
+          <div class="empty-icon" aria-hidden="true">○</div>
+          <strong>No events in this view</strong>
+          <span id="emptyStateCopy">Choose a calendar, adjust search, or create an event when writes are enabled.</span>
+        </div>
+
+        <div id="loadingState" class="loading-overlay hidden" aria-live="polite" aria-busy="true">
+          <div class="loading-card">
+            <span class="loading-spinner" aria-hidden="true"></span>
+            <span>Refreshing calendar…</span>
+          </div>
+        </div>
+      </section>
+
+      <aside class="insight-rail glaze-surface" aria-label="Calendar overview">
+        <section class="rail-section">
+          <div class="rail-heading">
+            <div>
+              <span class="section-label">Today</span>
+              <h2 id="todayHeading">Today</h2>
+            </div>
+            <span id="todayDate" class="date-badge"></span>
+          </div>
+          <div id="todayEvents" class="rail-event-list"></div>
+        </section>
+        <section class="rail-section rail-section-divider">
+          <div class="rail-heading">
+            <div>
+              <span class="section-label">Next</span>
+              <h2>Coming up</h2>
+            </div>
+          </div>
+          <div id="upcomingEvents" class="rail-event-list"></div>
+        </section>
+        <div class="account-chip">
+          <span class="avatar" aria-hidden="true">G</span>
+          <div>
+            <span class="section-label">Signed in</span>
+            <strong id="userLabel"></strong>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <nav class="mobile-action-bar mobile-only" aria-label="Quick actions">
+      <button id="mobileTodayButton" type="button">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5zM8 2v4M16 2v4M5 8h14"/></svg>
+        <span>Today</span>
+      </button>
+      <button id="mobileCalendarsButton" type="button">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        <span>Calendars</span>
+      </button>
+      <button id="mobileNewButton" class="mobile-new" type="button">
+        <span aria-hidden="true">+</span>
+        <span>New</span>
+      </button>
+    </nav>
   </div>
 
   <dialog id="eventDialog" class="event-dialog">
-    <form id="eventForm" method="dialog" class="dialog-card">
-      <div class="dialog-heading">
+    <form id="eventForm" method="dialog" class="event-dialog-card" novalidate>
+      <header class="dialog-header">
         <div>
-          <p class="eyebrow">GoreeCloud Calendar</p>
+          <span class="glaze-kicker">GoreeCloud Calendar</span>
           <h2 id="dialogTitle">New event</h2>
         </div>
-        <button id="closeDialogButton" class="icon-button" type="button" aria-label="Close">×</button>
-      </div>
+        <div class="dialog-header-actions">
+          <span id="readOnlyBadge" class="glaze-badge hidden">Read only</span>
+          <button id="closeDialogButton" class="glaze-icon-button" type="button" aria-label="Close event dialog">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+          </button>
+        </div>
+      </header>
+
       <input id="eventHref" type="hidden">
       <input id="eventEtag" type="hidden">
-      <label>
-        <span>Calendar</span>
-        <select id="eventCalendar" required></select>
-      </label>
-      <label>
-        <span>Title</span>
-        <input id="eventSummary" maxlength="500" required>
-      </label>
-      <label class="check-row">
-        <input id="eventAllDay" type="checkbox">
-        <span>All day</span>
-      </label>
-      <div class="two-column">
-        <label>
-          <span>Starts</span>
-          <input id="eventStart" type="datetime-local" required>
+
+      <div class="dialog-body">
+        <label class="glaze-field event-title-field">
+          <span>Title</span>
+          <input id="eventSummary" maxlength="500" placeholder="Event title" required>
         </label>
-        <label>
-          <span>Ends</span>
-          <input id="eventEnd" type="datetime-local">
+
+        <div class="event-form-grid">
+          <label class="glaze-field">
+            <span>Calendar</span>
+            <select id="eventCalendar" required></select>
+          </label>
+          <label class="glaze-check-row">
+            <input id="eventAllDay" type="checkbox">
+            <span>All day</span>
+          </label>
+        </div>
+
+        <div class="event-form-grid two-up">
+          <label class="glaze-field">
+            <span>Starts</span>
+            <input id="eventStart" type="datetime-local" required>
+          </label>
+          <label class="glaze-field">
+            <span>Ends</span>
+            <input id="eventEnd" type="datetime-local">
+          </label>
+        </div>
+
+        <label class="glaze-field">
+          <span>Location</span>
+          <input id="eventLocation" maxlength="2000" placeholder="Add a location">
         </label>
+
+        <label class="glaze-field">
+          <span>Description</span>
+          <textarea id="eventDescription" rows="5" maxlength="20000" placeholder="Add notes or details"></textarea>
+        </label>
+
+        <p id="eventWarning" class="glaze-notice hidden"></p>
+        <p id="eventError" class="glaze-error" role="alert" aria-live="assertive"></p>
       </div>
-      <label>
-        <span>Location</span>
-        <input id="eventLocation" maxlength="2000">
-      </label>
-      <label>
-        <span>Description</span>
-        <textarea id="eventDescription" rows="4" maxlength="20000"></textarea>
-      </label>
-      <p id="eventWarning" class="dialog-warning hidden"></p>
-      <p id="eventError" class="form-error" role="alert"></p>
-      <div class="dialog-actions">
-        <button id="deleteEventButton" class="danger-button hidden" type="button">Delete</button>
-        <div class="spacer"></div>
-        <button id="cancelEventButton" class="secondary-button" type="button">Cancel</button>
-        <button id="saveEventButton" class="primary-button" type="submit">Save</button>
-      </div>
+
+      <footer class="dialog-actions">
+        <button id="deleteEventButton" class="glaze-button glaze-button-danger hidden" type="button">Delete</button>
+        <span class="dialog-spacer"></span>
+        <button id="cancelEventButton" class="glaze-button glaze-button-secondary" type="button">Cancel</button>
+        <button id="saveEventButton" class="glaze-button glaze-button-primary" type="submit">Save event</button>
+      </footer>
     </form>
   </dialog>
 
-  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+  <dialog id="confirmDialog" class="confirm-dialog">
+    <section class="confirm-card">
+      <div class="confirm-icon" aria-hidden="true">!</div>
+      <div>
+        <span class="glaze-kicker">Confirm action</span>
+        <h2 id="confirmTitle">Confirm</h2>
+        <p id="confirmCopy" class="glaze-muted"></p>
+      </div>
+      <div class="confirm-actions">
+        <button id="confirmCancelButton" class="glaze-button glaze-button-secondary" type="button">Cancel</button>
+        <button id="confirmActionButton" class="glaze-button glaze-button-danger" type="button">Continue</button>
+      </div>
+    </section>
+  </dialog>
+
+  <div id="toast" class="glaze-toast hidden" role="status" aria-live="polite"></div>
 </body>
 </html>
