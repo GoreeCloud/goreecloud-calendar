@@ -4,7 +4,7 @@ from app.main import app
 
 
 def test_liveness_has_restrictive_browser_headers():
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://localhost") as client:
         response = client.get("/api/health/live")
 
     assert response.status_code == 200
@@ -17,7 +17,7 @@ def test_liveness_has_restrictive_browser_headers():
 
 
 def test_unknown_host_is_rejected():
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://localhost") as client:
         response = client.get(
             "/api/health/live",
             headers={"host": "not-approved.example"},
