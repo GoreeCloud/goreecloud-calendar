@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en" data-theme="system">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <meta name="referrer" content="same-origin">
+  <title>GoreeCloud Calendar</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <script>document.documentElement.dataset.theme=localStorage.getItem('goreecloud-calendar-theme')||'system';</script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to calendar</a>
+  <div class="shell">
+    <header class="topbar glaze">
+      <div>
+        <p class="eyebrow">GoreeCloud</p>
+        <h1>Calendar</h1>
+      </div>
+      <div class="toolbar">
+        <button id="today" type="button">Today</button>
+        <select id="theme" aria-label="Appearance">
+          <option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option>
+        </select>
+      </div>
+    </header>
+    <main id="main" tabindex="-1">
+      <section class="hero glaze" aria-labelledby="monthTitle">
+        <div>
+          <p class="eyebrow">Private CalDAV view</p>
+          <h2 id="monthTitle">Calendar</h2>
+          <p id="status" class="status" role="status">Loading events…</p>
+        </div>
+        <div class="month-nav" aria-label="Calendar navigation">
+          <button id="previous" aria-label="Previous month">‹</button>
+          <button id="next" aria-label="Next month">›</button>
+        </div>
+      </section>
+      <section class="calendar-card glaze" aria-label="Month calendar">
+        <div class="weekdays" aria-hidden="true"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
+        <div id="grid" class="calendar-grid"></div>
+      </section>
+      <section class="agenda glaze" aria-labelledby="agendaTitle">
+        <div class="section-heading"><p class="eyebrow">Upcoming</p><h2 id="agendaTitle">Agenda</h2></div>
+        <div id="agendaList" class="agenda-list"></div>
+      </section>
+    </main>
+  </div>
+  <script src="/static/app.js" defer></script>
+</body>
+</html>

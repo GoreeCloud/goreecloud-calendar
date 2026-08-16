@@ -1,0 +1,14 @@
+services:
+  calendar:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    expose:
+      - "8000"
+    networks:
+      - calendar
+
+networks:
+  calendar:
+    internal: true
