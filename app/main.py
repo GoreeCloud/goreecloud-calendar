@@ -31,6 +31,25 @@ async def health() -> dict[str, object]:
     }
 
 
+@app.get("/api/calendars")
+async def calendars() -> dict[str, object]:
+    try:
+        collections = await CalDAVClient(settings).list_calendars()
+    except CalDAVError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {
+        "calendars": [
+            {
+                "id": item["href"],
+                "name": item["name"],
+                "color": item["color"],
+            }
+            for item in collections
+        ],
+        "readOnly": True,
+    }
+
+
 @app.get("/api/events")
 async def events(
     start: date = Query(...),
