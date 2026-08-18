@@ -7,6 +7,7 @@ from urllib.parse import unquote, urljoin, urlsplit
 
 import httpx
 from defusedxml import ElementTree as ET
+from defusedxml.common import DefusedXmlException
 
 from .config import Settings
 
@@ -122,12 +123,15 @@ def parse_vevents(payload: str) -> list[dict[str, object]]:
     return events
 
 
-def parse_calendar_collections(payload: str) -> list[dict[str, str]]:
+def _parse_xml(payload: str, error_message: str):
     try:
-        root = ET.fromstring(payload)
-    except ET.ParseError as exc:
-        raise CalDAVError("CalDAV calendar discovery returned invalid XML") from exc
+        return ET.fromstring(payload)
+    except (ET.ParseError, DefusedXmlException) as exc:
+        raise CalDAVError(error_message) from exc
 
+
+def parse_calendar_collections(payload: str) -> list[dict[str, str]]:
+    root = _parse_xml(payload, "CalDAV calendar discovery returned invalid XML")
     calendars: list[dict[str, str]] = []
     for response in root.findall(f".//{{{DAV}}}response"):
         href = response.find(f"{{{DAV}}}href")
@@ -152,26 +156,16 @@ def parse_calendar_collections(payload: str) -> list[dict[str, str]]:
 
 
 class CalDAVClient:
-    def __init__(
-        self,
-        settings: Settings,
-        credentials: tuple[str, str] | None = None,
-    ):
+    def __init__(self, settings: Settings, credentials: tuple[str, str]):
         self.settings = settings
+        username, password = credentials
+        if not username or not password:
+            raise CalDAVError("CalDAV user credentials are incomplete")
         self.credentials = credentials
         self._client: httpx.AsyncClient | None = None
 
     def _auth(self) -> tuple[str, str]:
-        if self.credentials is not None:
-            username, password = self.credentials
-            if not username or not password:
-                raise CalDAVError("CalDAV user credentials are incomplete")
-            return username, password
-        if self.settings.passthrough_auth_enabled:
-            raise CalDAVError("CalDAV user credentials are required")
-        if not self.settings.caldav_configured:
-            raise CalDAVError("CalDAV credentials are not configured")
-        return self.settings.caldav_username or "", self.settings.caldav_password or ""
+        return self.credentials
 
     def _http(self) -> httpx.AsyncClient:
         if self._client is None:
@@ -274,10 +268,7 @@ class CalDAVClient:
         )
         if response.status_code != 207:
             raise CalDAVError(f"CalDAV discovery failed with HTTP {response.status_code}")
-        try:
-            root = ET.fromstring(response.text)
-        except ET.ParseError as exc:
-            raise CalDAVError("CalDAV discovery returned invalid XML") from exc
+        root = _parse_xml(response.text, "CalDAV discovery returned invalid XML")
         href = root.find(f".//{{{CALDAV}}}calendar-home-set/{{{DAV}}}href")
         if href is None or not href.text:
             raise CalDAVError("CalDAV calendar-home-set was not returned")
@@ -309,10 +300,7 @@ class CalDAVClient:
             raise CalDAVError(
                 f"CalDAV event query for {calendar['name']} failed with HTTP {response.status_code}"
             )
-        try:
-            root = ET.fromstring(response.text)
-        except ET.ParseError as exc:
-            raise CalDAVError("CalDAV event query returned invalid XML") from exc
+        root = _parse_xml(response.text, "CalDAV event query returned invalid XML")
 
         events: list[dict[str, object]] = []
         for item in root.findall(f".//{{{DAV}}}response"):
