@@ -1,3 +1,4 @@
+from collections.abc import AsyncIterator
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -16,7 +17,13 @@ from .auth import (
     require_session,
     set_session_cookie,
 )
-from .caldav import CalDAVClient, CalDAVConflict, CalDAVError, CalDAVPreconditionRequired
+from .caldav import (
+    CalDAVAuthenticationError,
+    CalDAVClient,
+    CalDAVConflict,
+    CalDAVError,
+    CalDAVPreconditionRequired,
+)
 from .config import settings
 from .observability import WardveilMiddleware, configure_logging, emit_event
 
@@ -54,11 +61,29 @@ def current_session(request: Request) -> Session:
     return require_session(request, sessions)
 
 
-def current_client(session: Session = Depends(current_session)) -> CalDAVClient:
-    return CalDAVClient(settings, (session.username, session.password))
+async def current_client(session: Session = Depends(current_session)) -> AsyncIterator[CalDAVClient]:
+    client = CalDAVClient(settings, (session.username, session.password))
+    try:
+        yield client
+    finally:
+        await client.aclose()
 
 
-def mutation_error(exc: CalDAVError) -> HTTPException:
+def invalidate_session(request: Request) -> None:
+    sessions.delete(request.cookies.get(SESSION_COOKIE))
+
+
+def upstream_error(exc: CalDAVError, request: Request) -> HTTPException:
+    if isinstance(exc, CalDAVAuthenticationError):
+        invalidate_session(request)
+        return HTTPException(status_code=401, detail="Your calendar credentials are no longer accepted. Sign in again.")
+    return HTTPException(status_code=502, detail="Calendar service is temporarily unavailable")
+
+
+def mutation_error(exc: CalDAVError, request: Request) -> HTTPException:
+    if isinstance(exc, CalDAVAuthenticationError):
+        invalidate_session(request)
+        return HTTPException(status_code=401, detail="Your calendar credentials are no longer accepted. Sign in again.")
     if isinstance(exc, CalDAVConflict):
         return HTTPException(status_code=409, detail="The event changed elsewhere. Reload before trying again.")
     if isinstance(exc, CalDAVPreconditionRequired):
@@ -102,7 +127,7 @@ async def login(payload: LoginRequest, response: Response, request: Request) -> 
 @app.delete("/api/session", status_code=status.HTTP_204_NO_CONTENT)
 async def logout(request: Request, response: Response, session: Session = Depends(current_session)) -> Response:
     require_csrf(request, session)
-    sessions.delete(request.cookies.get(SESSION_COOKIE))
+    invalidate_session(request)
     clear_session_cookie(response, settings)
     emit_event("auth.logout", request_id=request.state.request_id)
     response.status_code = status.HTTP_204_NO_CONTENT
@@ -110,11 +135,11 @@ async def logout(request: Request, response: Response, session: Session = Depend
 
 
 @app.get("/api/calendars")
-async def calendars(client: CalDAVClient = Depends(current_client)) -> dict[str, object]:
+async def calendars(request: Request, client: CalDAVClient = Depends(current_client)) -> dict[str, object]:
     try:
         collections = await client.list_calendars()
     except CalDAVError as exc:
-        raise HTTPException(status_code=502, detail="Calendar service is temporarily unavailable") from exc
+        raise upstream_error(exc, request) from exc
     return {
         "calendars": [{"id": item["href"], "name": item["name"], "color": item["color"]} for item in collections],
         "readOnly": not settings.writes_available,
@@ -123,6 +148,7 @@ async def calendars(client: CalDAVClient = Depends(current_client)) -> dict[str,
 
 @app.get("/api/events")
 async def events(
+    request: Request,
     start: date = Query(...),
     end: date = Query(...),
     client: CalDAVClient = Depends(current_client),
@@ -134,7 +160,7 @@ async def events(
     try:
         items = await client.list_events(start, end)
     except CalDAVError as exc:
-        raise HTTPException(status_code=502, detail="Calendar service is temporarily unavailable") from exc
+        raise upstream_error(exc, request) from exc
     return {"events": items, "readOnly": not settings.writes_available}
 
 
@@ -147,7 +173,9 @@ async def create_event(payload: EventWriteRequest, request: Request, session: Se
     try:
         etag = await client.put_event(payload.calendarHref, payload.resourceHref, payload.ical, create=True)
     except CalDAVError as exc:
-        raise mutation_error(exc) from exc
+        raise mutation_error(exc, request) from exc
+    finally:
+        await client.aclose()
     emit_event("calendar.event.create", request_id=request.state.request_id)
     return {"etag": etag}
 
@@ -161,7 +189,9 @@ async def update_event(payload: EventWriteRequest, request: Request, session: Se
     try:
         etag = await client.put_event(payload.calendarHref, payload.resourceHref, payload.ical, etag=payload.etag)
     except CalDAVError as exc:
-        raise mutation_error(exc) from exc
+        raise mutation_error(exc, request) from exc
+    finally:
+        await client.aclose()
     emit_event("calendar.event.update", request_id=request.state.request_id)
     return {"etag": etag}
 
@@ -181,7 +211,9 @@ async def delete_event(
     try:
         await client.delete_event(calendar_href, resource_href, etag=etag)
     except CalDAVError as exc:
-        raise mutation_error(exc) from exc
+        raise mutation_error(exc, request) from exc
+    finally:
+        await client.aclose()
     emit_event("calendar.event.delete", request_id=request.state.request_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
