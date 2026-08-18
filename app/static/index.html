@@ -10,7 +10,6 @@
   <meta name="goreecloud-security" content="Wardveil Security by GoreeCloud">
   <title>GoreeCloud Calendar</title>
   <link rel="stylesheet" href="/static/app.css">
-  <script>document.documentElement.dataset.theme=localStorage.getItem('goreecloud-calendar-theme')||'system';</script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to calendar</a>
@@ -57,7 +56,7 @@
   <dialog id="eventDialog" class="event-dialog overlay">
     <form id="eventForm" method="dialog">
       <div class="dialog-heading"><div><p class="eyebrow">Calendar event</p><h2 id="eventDialogTitle">New event</h2></div><button id="closeDialog" class="icon-button" type="button" aria-label="Close">×</button></div>
-      <div id="eventNotice" class="notice" hidden></div>
+      <div id="eventNotice" class="notice" role="alert" hidden></div>
       <label>Calendar<select id="eventCalendar" required></select></label>
       <label>Title<input id="eventTitle" required maxlength="200"></label>
       <div class="field-grid"><label>Starts<input id="eventStart" type="datetime-local" required></label><label>Ends<input id="eventEnd" type="datetime-local" required></label></div>
