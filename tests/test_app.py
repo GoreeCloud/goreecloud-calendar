@@ -1,6 +1,18 @@
+import asyncio
+from types import SimpleNamespace
+
+import pytest
 from fastapi.testclient import TestClient
 
-from app.caldav import parse_calendar_collections, parse_vevents
+from app.caldav import (
+    CalDAVClient,
+    CalDAVConflict,
+    CalDAVError,
+    CalDAVPreconditionRequired,
+    parse_calendar_collections,
+    parse_vevents,
+)
+from app.config import Settings
 from app.main import app
 
 
@@ -69,3 +81,120 @@ def test_parse_calendar_collections_filters_non_calendar_resources():
     assert parse_calendar_collections(payload) == [
         {'href': '/user/personal/', 'name': 'Personal', 'color': '#5b7cff'}
     ]
+
+
+def writable_client() -> CalDAVClient:
+    settings = Settings(
+        caldav_base_url='https://dav.goreecloud.com',
+        caldav_auth_mode='passthrough',
+        caldav_write_enabled=True,
+    )
+    return CalDAVClient(settings, ('synthetic-user', 'synthetic-password'))
+
+
+def sample_ics() -> str:
+    return '''BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:test-1\r\nDTSTART:20260820T150000Z\r\nSUMMARY:Test\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n'''
+
+
+def test_passthrough_write_mode_requires_both_flags():
+    assert Settings(caldav_auth_mode='passthrough', caldav_write_enabled=True).writes_available is True
+    assert Settings(caldav_auth_mode='service', caldav_write_enabled=True).writes_available is False
+    assert Settings(caldav_auth_mode='passthrough', caldav_write_enabled=False).writes_available is False
+
+
+def test_caldav_url_rejects_cross_origin_href():
+    client = writable_client()
+    with pytest.raises(CalDAVError, match='outside the configured DAV origin'):
+        client._url('https://example.invalid/users/a/calendar.ics')
+
+
+def test_write_rejects_resource_outside_selected_calendar():
+    client = writable_client()
+    with pytest.raises(CalDAVError, match='outside the selected calendar collection'):
+        asyncio.run(client.put_event('/user/personal/', '/user/other/event.ics', sample_ics(), create=True))
+
+
+def test_update_requires_etag_before_network_request():
+    client = writable_client()
+    with pytest.raises(CalDAVPreconditionRequired, match='ETag'):
+        asyncio.run(client.put_event('/user/personal/', '/user/personal/event.ics', sample_ics()))
+
+
+def test_create_uses_if_none_match_star(monkeypatch):
+    client = writable_client()
+    captured = {}
+
+    async def fake_request(method, url, body=None, **kwargs):
+        captured.update(method=method, url=url, body=body, kwargs=kwargs)
+        return SimpleNamespace(status_code=201, headers={'ETag': '"new-etag"'})
+
+    monkeypatch.setattr(client, '_request', fake_request)
+    etag = asyncio.run(
+        client.put_event('/user/personal/', '/user/personal/new.ics', sample_ics(), create=True)
+    )
+    assert etag == '"new-etag"'
+    assert captured['method'] == 'PUT'
+    assert captured['kwargs']['extra_headers'] == {'If-None-Match': '*'}
+    assert captured['kwargs']['content_type'] == 'text/calendar; charset=utf-8'
+
+
+def test_update_uses_if_match(monkeypatch):
+    client = writable_client()
+    captured = {}
+
+    async def fake_request(method, url, body=None, **kwargs):
+        captured.update(method=method, url=url, body=body, kwargs=kwargs)
+        return SimpleNamespace(status_code=204, headers={'ETag': '"next-etag"'})
+
+    monkeypatch.setattr(client, '_request', fake_request)
+    asyncio.run(
+        client.put_event(
+            '/user/personal/',
+            '/user/personal/event.ics',
+            sample_ics(),
+            etag='"old-etag"',
+        )
+    )
+    assert captured['kwargs']['extra_headers'] == {'If-Match': '"old-etag"'}
+
+
+def test_delete_requires_etag():
+    client = writable_client()
+    with pytest.raises(CalDAVPreconditionRequired, match='ETag'):
+        asyncio.run(client.delete_event('/user/personal/', '/user/personal/event.ics', etag=None))
+
+
+def test_delete_uses_if_match(monkeypatch):
+    client = writable_client()
+    captured = {}
+
+    async def fake_request(method, url, body=None, **kwargs):
+        captured.update(method=method, url=url, body=body, kwargs=kwargs)
+        return SimpleNamespace(status_code=204, headers={})
+
+    monkeypatch.setattr(client, '_request', fake_request)
+    asyncio.run(
+        client.delete_event(
+            '/user/personal/', '/user/personal/event.ics', etag='"delete-etag"'
+        )
+    )
+    assert captured['method'] == 'DELETE'
+    assert captured['kwargs']['extra_headers'] == {'If-Match': '"delete-etag"'}
+
+
+def test_precondition_failure_becomes_conflict(monkeypatch):
+    client = writable_client()
+
+    async def fake_request(method, url, body=None, **kwargs):
+        return SimpleNamespace(status_code=412, headers={})
+
+    monkeypatch.setattr(client, '_request', fake_request)
+    with pytest.raises(CalDAVConflict, match='changed before the write completed'):
+        asyncio.run(
+            client.put_event(
+                '/user/personal/',
+                '/user/personal/event.ics',
+                sample_ics(),
+                etag='"stale-etag"',
+            )
+        )
