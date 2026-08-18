@@ -4,12 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "goreecloud-calendar"
-version = "0.1.0.dev0"
+version = "0.2.0rc1"
 description = "Privacy-first GoreeCloud CalDAV calendar application"
 readme = "README.md"
 requires-python = ">=3.12"
 license = {text = "AGPL-3.0-only"}
 dependencies = [
+  "defusedxml>=0.7.1,<1",
   "fastapi>=0.116,<1",
   "httpx>=0.28,<1",
   "uvicorn[standard]>=0.35,<1",
