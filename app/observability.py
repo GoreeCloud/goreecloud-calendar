@@ -61,6 +61,8 @@ class WardveilMiddleware(BaseHTTPMiddleware):
         response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
         response.headers["Origin-Agent-Cluster"] = "?1"
         response.headers["X-Permitted-Cross-Domain-Policies"] = "none"
+        response.headers["X-Robots-Tag"] = "noindex, nofollow, noarchive"
+        response.headers["Strict-Transport-Security"] = "max-age=31536000"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; "
