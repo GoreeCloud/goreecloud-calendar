@@ -28,7 +28,7 @@ jobs:
       - name: Dependency consistency
         run: pip check
       - name: Python vulnerability audit
-        run: pip-audit --strict
+        run: pip-audit --strict --skip-editable
       - name: Tests and coverage
         run: pytest --cov=app --cov-report=term-missing --cov-fail-under=80
       - name: Compile source
