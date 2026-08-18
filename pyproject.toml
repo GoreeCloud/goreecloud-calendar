@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "goreecloud-calendar"
+version = "0.2.0rc1"
+description = "Privacy-first GoreeCloud CalDAV calendar application"
+readme = "README.md"
+requires-python = ">=3.12"
+license = {text = "AGPL-3.0-only"}
+dependencies = [
+  "defusedxml>=0.7.1,<1",
+  "fastapi>=0.116,<1",
+  "httpx>=0.28,<1",
+  "uvicorn[standard]>=0.35,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.4,<9",
+  "pytest-cov>=6.2,<7",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.setuptools.packages.find]
+include = ["app*"]

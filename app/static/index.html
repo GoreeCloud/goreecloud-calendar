@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en" data-theme="system">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <meta name="referrer" content="no-referrer">
+  <meta name="color-scheme" content="light dark">
+  <meta name="goreecloud-design-system" content="Glaze UI 1.0">
+  <meta name="goreecloud-security" content="Wardveil Security by GoreeCloud">
+  <title>GoreeCloud Calendar</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <link rel="stylesheet" href="/static/palette.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to calendar</a>
+
+  <section id="authView" class="auth-shell" aria-labelledby="authTitle">
+    <form id="loginForm" class="auth-card glaze overlay" autocomplete="on">
+      <div class="product-mark" aria-hidden="true">31</div>
+      <p class="eyebrow">GoreeCloud Calendar</p>
+      <h1 id="authTitle">Your calendar, privately connected.</h1>
+      <p class="lede">Sign in with your individual GoreeCloud DAV identity. Credentials stay in server memory for the active session and are never stored by the browser.</p>
+      <label>Username<input id="username" name="username" autocomplete="username" required maxlength="254"></label>
+      <label>Password<input id="password" name="password" type="password" autocomplete="current-password" required maxlength="1024"></label>
+      <button id="signIn" class="primary" type="submit">Sign in</button>
+      <p id="authStatus" class="status" role="status"></p>
+      <div class="wardveil-note"><span class="wardveil-mark" aria-hidden="true">◇</span><div><strong>Protected by Wardveil</strong><span>Session isolation, request verification, privacy-minimized logging, and secure response policy.</span></div></div>
+    </form>
+  </section>
+
+  <div id="appShell" class="shell" hidden>
+    <header class="topbar glaze">
+      <div class="brand-row"><div class="product-mark small" aria-hidden="true">31</div><div><p class="eyebrow">GoreeCloud</p><h1>Calendar</h1></div></div>
+      <div class="toolbar">
+        <span class="security-chip" title="Wardveil Security by GoreeCloud">◇ Wardveil</span>
+        <button id="newEvent" class="primary" type="button" hidden>New event</button>
+        <button id="today" type="button">Today</button>
+        <select id="theme" aria-label="Appearance"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select>
+        <button id="signOut" type="button">Sign out</button>
+      </div>
+    </header>
+    <main id="main" tabindex="-1">
+      <section class="hero glaze" aria-labelledby="monthTitle">
+        <div><p class="eyebrow">Private CalDAV calendar</p><h2 id="monthTitle">Calendar</h2><p id="status" class="status" role="status">Loading…</p></div>
+        <div class="month-nav" aria-label="Calendar navigation"><button id="previous" aria-label="Previous month">‹</button><button id="next" aria-label="Next month">›</button></div>
+      </section>
+      <section id="calendarFilters" class="filters glaze" aria-labelledby="filtersTitle"><div><p class="eyebrow">Calendars</p><h2 id="filtersTitle">Visible calendars</h2></div><div id="calendarChoices" class="filter-list"></div></section>
+      <section class="calendar-card glaze" aria-label="Month calendar">
+        <div class="weekdays" aria-hidden="true"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
+        <div id="grid" class="calendar-grid"></div>
+      </section>
+      <section class="agenda glaze" aria-labelledby="agendaTitle"><div class="section-heading"><p class="eyebrow">Upcoming</p><h2 id="agendaTitle">Agenda</h2></div><div id="agendaList" class="agenda-list"></div></section>
+    </main>
+  </div>
+
+  <dialog id="eventDialog" class="event-dialog overlay">
+    <form id="eventForm" method="dialog">
+      <div class="dialog-heading"><div><p class="eyebrow">Calendar event</p><h2 id="eventDialogTitle">New event</h2></div><button id="closeDialog" class="icon-button" type="button" aria-label="Close">×</button></div>
+      <div id="eventNotice" class="notice" role="alert" hidden></div>
+      <label>Calendar<select id="eventCalendar" required></select></label>
+      <label>Title<input id="eventTitle" required maxlength="200"></label>
+      <div class="field-grid"><label>Starts<input id="eventStart" type="datetime-local" required></label><label>Ends<input id="eventEnd" type="datetime-local" required></label></div>
+      <label>Location<input id="eventLocation" maxlength="500"></label>
+      <label>Description<textarea id="eventDescription" maxlength="8000" rows="4"></textarea></label>
+      <div class="dialog-actions"><button id="deleteEvent" class="danger" type="button" hidden>Delete</button><span></span><button id="cancelEvent" type="button">Cancel</button><button id="saveEvent" class="primary" type="submit">Save event</button></div>
+    </form>
+  </dialog>
+
+  <div id="toastRegion" class="toast-region" aria-live="polite" aria-atomic="true"></div>
+  <noscript><div class="noscript">GoreeCloud Calendar requires JavaScript for its interactive Glaze UI. No calendar data was loaded.</div></noscript>
+  <script src="/static/app.js" defer></script>
+</body>
+</html>
