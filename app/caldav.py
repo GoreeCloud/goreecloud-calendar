@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from asyncio import sleep
 from datetime import date, datetime
-from urllib.parse import urljoin, urlsplit
-from xml.etree import ElementTree as ET
+from posixpath import normpath
+from urllib.parse import unquote, urljoin, urlsplit
 
 import httpx
+from defusedxml import ElementTree as ET
 
 from .config import Settings
 
@@ -12,6 +14,8 @@ DAV = "DAV:"
 CALDAV = "urn:ietf:params:xml:ns:caldav"
 ICAL = "http://apple.com/ns/ical/"
 MAX_ICAL_BYTES = 256 * 1024
+MAX_UPSTREAM_RESPONSE_BYTES = 8 * 1024 * 1024
+READ_RETRY_METHODS = {"PROPFIND", "REPORT"}
 
 
 class CalDAVError(RuntimeError):
@@ -23,6 +27,10 @@ class CalDAVConflict(CalDAVError):
 
 
 class CalDAVPreconditionRequired(CalDAVError):
+    pass
+
+
+class CalDAVAuthenticationError(CalDAVError):
     pass
 
 
@@ -151,6 +159,7 @@ class CalDAVClient:
     ):
         self.settings = settings
         self.credentials = credentials
+        self._client: httpx.AsyncClient | None = None
 
     def _auth(self) -> tuple[str, str]:
         if self.credentials is not None:
@@ -164,6 +173,23 @@ class CalDAVClient:
             raise CalDAVError("CalDAV credentials are not configured")
         return self.settings.caldav_username or "", self.settings.caldav_password or ""
 
+    def _http(self) -> httpx.AsyncClient:
+        if self._client is None:
+            timeout = httpx.Timeout(self.settings.upstream_timeout_seconds)
+            limits = httpx.Limits(max_connections=8, max_keepalive_connections=4, keepalive_expiry=20)
+            self._client = httpx.AsyncClient(
+                timeout=timeout,
+                limits=limits,
+                follow_redirects=False,
+                headers={"User-Agent": "GoreeCloud-Calendar/0.2"},
+            )
+        return self._client
+
+    async def aclose(self) -> None:
+        if self._client is not None:
+            await self._client.aclose()
+            self._client = None
+
     def _url(self, href: str) -> str:
         base = self.settings.caldav_base_url.rstrip("/") + "/"
         resolved = urljoin(base, href)
@@ -171,12 +197,14 @@ class CalDAVClient:
         resolved_parts = urlsplit(resolved)
         if (resolved_parts.scheme, resolved_parts.netloc) != (base_parts.scheme, base_parts.netloc):
             raise CalDAVError("CalDAV returned a resource outside the configured DAV origin")
+        if resolved_parts.query or resolved_parts.fragment:
+            raise CalDAVError("CalDAV resource URLs must not contain query strings or fragments")
         return resolved
 
     def _validate_resource_boundary(self, calendar_href: str, resource_href: str) -> None:
-        calendar_path = urlsplit(self._url(calendar_href)).path.rstrip("/") + "/"
-        resource_path = urlsplit(self._url(resource_href)).path
-        if not resource_path.startswith(calendar_path) or resource_path == calendar_path:
+        calendar_path = normpath(unquote(urlsplit(self._url(calendar_href)).path)).rstrip("/") + "/"
+        resource_path = normpath(unquote(urlsplit(self._url(resource_href)).path))
+        if not resource_path.startswith(calendar_path) or resource_path == calendar_path.rstrip("/"):
             raise CalDAVError("CalDAV resource is outside the selected calendar collection")
 
     @staticmethod
@@ -185,8 +213,17 @@ class CalDAVClient:
         if len(encoded) > MAX_ICAL_BYTES:
             raise CalDAVError("iCalendar payload exceeds the 256 KiB safety limit")
         upper = payload.upper()
-        if "BEGIN:VCALENDAR" not in upper or "BEGIN:VEVENT" not in upper or "END:VCALENDAR" not in upper:
-            raise CalDAVError("iCalendar payload must contain VCALENDAR and VEVENT components")
+        required = ("BEGIN:VCALENDAR", "END:VCALENDAR", "BEGIN:VEVENT", "END:VEVENT", "UID:", "DTSTART")
+        if not all(marker in upper for marker in required):
+            raise CalDAVError("iCalendar payload is missing required VCALENDAR or VEVENT fields")
+
+    @staticmethod
+    def _validate_upstream_response(response: httpx.Response) -> None:
+        content_length = response.headers.get("Content-Length")
+        if content_length and content_length.isdigit() and int(content_length) > MAX_UPSTREAM_RESPONSE_BYTES:
+            raise CalDAVError("CalDAV response exceeds the application safety limit")
+        if len(response.content) > MAX_UPSTREAM_RESPONSE_BYTES:
+            raise CalDAVError("CalDAV response exceeds the application safety limit")
 
     async def _request(
         self,
@@ -205,20 +242,27 @@ class CalDAVClient:
             headers["Content-Type"] = content_type
         if extra_headers:
             headers.update(extra_headers)
-        try:
-            async with httpx.AsyncClient(
-                timeout=self.settings.upstream_timeout_seconds,
-                follow_redirects=False,
-            ) as client:
-                return await client.request(
+
+        attempts = 2 if method in READ_RETRY_METHODS else 1
+        for attempt in range(attempts):
+            try:
+                response = await self._http().request(
                     method,
                     url,
                     content=body,
                     headers=headers,
                     auth=self._auth(),
                 )
-        except httpx.RequestError as exc:
-            raise CalDAVError("CalDAV service is unreachable") from exc
+                self._validate_upstream_response(response)
+                if response.status_code in {401, 403}:
+                    raise CalDAVAuthenticationError("CalDAV authentication or authorization failed")
+                return response
+            except httpx.RequestError as exc:
+                if attempt + 1 < attempts:
+                    await sleep(0.15)
+                    continue
+                raise CalDAVError("CalDAV service is unreachable") from exc
+        raise CalDAVError("CalDAV request failed")
 
     async def calendar_home(self) -> str:
         body = """<?xml version='1.0' encoding='utf-8'?>
