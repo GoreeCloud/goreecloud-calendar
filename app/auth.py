@@ -1,16 +1,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from hmac import compare_digest
 from secrets import token_urlsafe
 from threading import RLock
-from time import monotonic
+from time import monotonic, sleep
 
 from fastapi import HTTPException, Request, Response, status
 
 from .caldav import CalDAVClient, CalDAVError
 from .config import Settings
 
-SESSION_COOKIE = "__Host-goreecloud_calendar_session"
+SESSION_COOKIE = "goreecloud_calendar_session"
 
 
 @dataclass
@@ -70,11 +71,13 @@ class SessionStore:
 
 async def authenticate(settings: Settings, store: SessionStore, username: str, password: str) -> tuple[str, Session]:
     if not username or not password or len(username) > 254 or len(password) > 1024:
+        sleep(0.25)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     client = CalDAVClient(settings, (username, password))
     try:
         await client.list_calendars()
     except CalDAVError as exc:
+        sleep(0.25)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials") from exc
     return store.create(username, password)
 
@@ -91,8 +94,14 @@ def set_session_cookie(response: Response, settings: Settings, session_id: str) 
     )
 
 
-def clear_session_cookie(response: Response) -> None:
-    response.delete_cookie(SESSION_COOKIE, path="/")
+def clear_session_cookie(response: Response, settings: Settings) -> None:
+    response.delete_cookie(
+        SESSION_COOKIE,
+        path="/",
+        secure=settings.secure_cookies,
+        httponly=True,
+        samesite="strict",
+    )
 
 
 def require_session(request: Request, store: SessionStore) -> Session:
@@ -104,5 +113,5 @@ def require_session(request: Request, store: SessionStore) -> Session:
 
 def require_csrf(request: Request, session: Session) -> None:
     supplied = request.headers.get("X-CSRF-Token", "")
-    if not supplied or supplied != session.csrf_token:
+    if not supplied or not compare_digest(supplied, session.csrf_token):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Request verification failed")
