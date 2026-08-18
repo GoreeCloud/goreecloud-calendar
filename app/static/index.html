@@ -36,6 +36,15 @@
           <button id="next" aria-label="Next month">›</button>
         </div>
       </section>
+      <section class="calendar-controls glaze" aria-labelledby="calendarVisibilityTitle">
+        <div class="section-heading">
+          <p class="eyebrow">Visibility</p>
+          <h2 id="calendarVisibilityTitle">My calendars</h2>
+        </div>
+        <div id="calendarFilters" class="calendar-filters" role="group" aria-label="Visible calendars">
+          <p class="empty compact">Loading calendars…</p>
+        </div>
+      </section>
       <section class="calendar-card glaze" aria-label="Month calendar">
         <div class="weekdays" aria-hidden="true"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
         <div id="grid" class="calendar-grid"></div>
