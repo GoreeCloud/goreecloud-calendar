@@ -89,16 +89,21 @@ async def meta(request: Request) -> dict[str, object]:
 async def login(payload: LoginRequest, response: Response, request: Request) -> dict[str, object]:
     if not settings.passthrough_auth_enabled:
         raise HTTPException(status_code=503, detail="Individual Calendar authentication is not enabled")
-    session_id, session = await authenticate(settings, sessions, payload.username, payload.password)
+    try:
+        session_id, session = await authenticate(settings, sessions, payload.username, payload.password)
+    except HTTPException:
+        emit_event("auth.login.failed", request_id=request.state.request_id)
+        raise
     set_session_cookie(response, settings, session_id)
     emit_event("auth.login.success", request_id=request.state.request_id)
     return {"authenticated": True, "csrfToken": session.csrf_token}
 
 
 @app.delete("/api/session", status_code=status.HTTP_204_NO_CONTENT)
-async def logout(request: Request, response: Response) -> Response:
+async def logout(request: Request, response: Response, session: Session = Depends(current_session)) -> Response:
+    require_csrf(request, session)
     sessions.delete(request.cookies.get(SESSION_COOKIE))
-    clear_session_cookie(response)
+    clear_session_cookie(response, settings)
     emit_event("auth.logout", request_id=request.state.request_id)
     response.status_code = status.HTTP_204_NO_CONTENT
     return response
@@ -163,13 +168,12 @@ async def update_event(payload: EventWriteRequest, request: Request, session: Se
 
 @app.delete("/api/events", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_event(
+    request: Request,
     calendar_href: str = Query(..., alias="calendarHref", max_length=2048),
     resource_href: str = Query(..., alias="resourceHref", max_length=2048),
     etag: str = Query(..., max_length=512),
-    request: Request = None,
     session: Session = Depends(current_session),
 ) -> Response:
-    assert request is not None
     if not settings.writes_available:
         raise HTTPException(status_code=403, detail="Calendar writes are disabled")
     require_csrf(request, session)
