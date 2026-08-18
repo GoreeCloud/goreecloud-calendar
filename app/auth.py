@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from asyncio import sleep
 from dataclasses import dataclass
 from hmac import compare_digest
 from secrets import token_urlsafe
 from threading import RLock
-from time import monotonic, sleep
+from time import monotonic
 
 from fastapi import HTTPException, Request, Response, status
 
@@ -71,13 +72,13 @@ class SessionStore:
 
 async def authenticate(settings: Settings, store: SessionStore, username: str, password: str) -> tuple[str, Session]:
     if not username or not password or len(username) > 254 or len(password) > 1024:
-        sleep(0.25)
+        await sleep(0.25)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     client = CalDAVClient(settings, (username, password))
     try:
         await client.list_calendars()
     except CalDAVError as exc:
-        sleep(0.25)
+        await sleep(0.25)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials") from exc
     return store.create(username, password)
 
