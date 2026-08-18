@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
 from xml.etree import ElementTree as ET
 
 import httpx
@@ -11,9 +11,18 @@ from .config import Settings
 DAV = "DAV:"
 CALDAV = "urn:ietf:params:xml:ns:caldav"
 ICAL = "http://apple.com/ns/ical/"
+MAX_ICAL_BYTES = 256 * 1024
 
 
 class CalDAVError(RuntimeError):
+    pass
+
+
+class CalDAVConflict(CalDAVError):
+    pass
+
+
+class CalDAVPreconditionRequired(CalDAVError):
     pass
 
 
@@ -135,18 +144,67 @@ def parse_calendar_collections(payload: str) -> list[dict[str, str]]:
 
 
 class CalDAVClient:
-    def __init__(self, settings: Settings):
+    def __init__(
+        self,
+        settings: Settings,
+        credentials: tuple[str, str] | None = None,
+    ):
         self.settings = settings
+        self.credentials = credentials
 
     def _auth(self) -> tuple[str, str]:
+        if self.credentials is not None:
+            username, password = self.credentials
+            if not username or not password:
+                raise CalDAVError("CalDAV user credentials are incomplete")
+            return username, password
+        if self.settings.passthrough_auth_enabled:
+            raise CalDAVError("CalDAV user credentials are required")
         if not self.settings.caldav_configured:
             raise CalDAVError("CalDAV credentials are not configured")
         return self.settings.caldav_username or "", self.settings.caldav_password or ""
 
     def _url(self, href: str) -> str:
-        return urljoin(self.settings.caldav_base_url.rstrip("/") + "/", href)
+        base = self.settings.caldav_base_url.rstrip("/") + "/"
+        resolved = urljoin(base, href)
+        base_parts = urlsplit(base)
+        resolved_parts = urlsplit(resolved)
+        if (resolved_parts.scheme, resolved_parts.netloc) != (base_parts.scheme, base_parts.netloc):
+            raise CalDAVError("CalDAV returned a resource outside the configured DAV origin")
+        return resolved
 
-    async def _request(self, method: str, url: str, body: str, depth: str) -> httpx.Response:
+    def _validate_resource_boundary(self, calendar_href: str, resource_href: str) -> None:
+        calendar_path = urlsplit(self._url(calendar_href)).path.rstrip("/") + "/"
+        resource_path = urlsplit(self._url(resource_href)).path
+        if not resource_path.startswith(calendar_path) or resource_path == calendar_path:
+            raise CalDAVError("CalDAV resource is outside the selected calendar collection")
+
+    @staticmethod
+    def _validate_ical_payload(payload: str) -> None:
+        encoded = payload.encode("utf-8")
+        if len(encoded) > MAX_ICAL_BYTES:
+            raise CalDAVError("iCalendar payload exceeds the 256 KiB safety limit")
+        upper = payload.upper()
+        if "BEGIN:VCALENDAR" not in upper or "BEGIN:VEVENT" not in upper or "END:VCALENDAR" not in upper:
+            raise CalDAVError("iCalendar payload must contain VCALENDAR and VEVENT components")
+
+    async def _request(
+        self,
+        method: str,
+        url: str,
+        body: str | None = None,
+        *,
+        depth: str | None = None,
+        content_type: str | None = "application/xml; charset=utf-8",
+        extra_headers: dict[str, str] | None = None,
+    ) -> httpx.Response:
+        headers: dict[str, str] = {}
+        if depth is not None:
+            headers["Depth"] = depth
+        if content_type is not None:
+            headers["Content-Type"] = content_type
+        if extra_headers:
+            headers.update(extra_headers)
         try:
             async with httpx.AsyncClient(
                 timeout=self.settings.upstream_timeout_seconds,
@@ -156,7 +214,7 @@ class CalDAVClient:
                     method,
                     url,
                     content=body,
-                    headers={"Depth": depth, "Content-Type": "application/xml; charset=utf-8"},
+                    headers=headers,
                     auth=self._auth(),
                 )
         except httpx.RequestError as exc:
@@ -168,7 +226,7 @@ class CalDAVClient:
   <d:prop><c:calendar-home-set/></d:prop>
 </d:propfind>"""
         response = await self._request(
-            "PROPFIND", self.settings.caldav_base_url.rstrip("/") + "/", body, "0"
+            "PROPFIND", self.settings.caldav_base_url.rstrip("/") + "/", body, depth="0"
         )
         if response.status_code != 207:
             raise CalDAVError(f"CalDAV discovery failed with HTTP {response.status_code}")
@@ -187,7 +245,7 @@ class CalDAVClient:
 <d:propfind xmlns:d='DAV:' xmlns:c='urn:ietf:params:xml:ns:caldav' xmlns:i='http://apple.com/ns/ical/'>
   <d:prop><d:resourcetype/><d:displayname/><i:calendar-color/></d:prop>
 </d:propfind>"""
-        response = await self._request("PROPFIND", self._url(home), body, "1")
+        response = await self._request("PROPFIND", self._url(home), body, depth="1")
         if response.status_code != 207:
             raise CalDAVError(f"CalDAV calendar listing failed with HTTP {response.status_code}")
         return parse_calendar_collections(response.text)
@@ -202,7 +260,7 @@ class CalDAVClient:
   <d:prop><d:getetag/><c:calendar-data/></d:prop>
   <c:filter><c:comp-filter name='VCALENDAR'><c:comp-filter name='VEVENT'><c:time-range start='{start_utc}' end='{end_utc}'/></c:comp-filter></c:comp-filter></c:filter>
 </c:calendar-query>"""
-        response = await self._request("REPORT", self._url(calendar["href"]), body, "1")
+        response = await self._request("REPORT", self._url(calendar["href"]), body, depth="1")
         if response.status_code != 207:
             raise CalDAVError(
                 f"CalDAV event query for {calendar['name']} failed with HTTP {response.status_code}"
@@ -224,6 +282,7 @@ class CalDAVClient:
                 event["calendarColor"] = calendar["color"]
                 event["calendarHref"] = calendar["href"]
                 if href is not None and href.text:
+                    self._validate_resource_boundary(calendar["href"], href.text)
                     event["resourceHref"] = href.text
                 if etag is not None and etag.text:
                     event["etag"] = etag.text
@@ -237,3 +296,52 @@ class CalDAVClient:
             events.extend(await self._calendar_events(calendar, start, end))
         events.sort(key=lambda event: str(event.get("start", "")))
         return events
+
+    async def put_event(
+        self,
+        calendar_href: str,
+        resource_href: str,
+        payload: str,
+        *,
+        etag: str | None = None,
+        create: bool = False,
+    ) -> str | None:
+        if not self.settings.writes_available:
+            raise CalDAVError("CalDAV writes are disabled")
+        self._validate_resource_boundary(calendar_href, resource_href)
+        self._validate_ical_payload(payload)
+        if create and etag is not None:
+            raise CalDAVError("New resources must not include an existing ETag")
+        if not create and not etag:
+            raise CalDAVPreconditionRequired("An ETag is required to update an existing event")
+
+        condition = {"If-None-Match": "*"} if create else {"If-Match": etag or ""}
+        response = await self._request(
+            "PUT",
+            self._url(resource_href),
+            payload,
+            content_type="text/calendar; charset=utf-8",
+            extra_headers=condition,
+        )
+        if response.status_code == 412:
+            raise CalDAVConflict("The calendar resource changed before the write completed")
+        if response.status_code not in {201, 204}:
+            raise CalDAVError(f"CalDAV event write failed with HTTP {response.status_code}")
+        return response.headers.get("ETag")
+
+    async def delete_event(self, calendar_href: str, resource_href: str, *, etag: str | None) -> None:
+        if not self.settings.writes_available:
+            raise CalDAVError("CalDAV writes are disabled")
+        self._validate_resource_boundary(calendar_href, resource_href)
+        if not etag:
+            raise CalDAVPreconditionRequired("An ETag is required to delete an existing event")
+        response = await self._request(
+            "DELETE",
+            self._url(resource_href),
+            content_type=None,
+            extra_headers={"If-Match": etag},
+        )
+        if response.status_code == 412:
+            raise CalDAVConflict("The calendar resource changed before the delete completed")
+        if response.status_code not in {200, 204}:
+            raise CalDAVError(f"CalDAV event delete failed with HTTP {response.status_code}")
