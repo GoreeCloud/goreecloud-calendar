@@ -9,17 +9,52 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  test-and-security:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '3.12.13'
           cache: pip
-      - run: python -m pip install --upgrade pip
-      - run: pip install -e '.[dev]'
-      - run: pip check
-      - run: pytest --cov=app --cov-report=term-missing
-      - run: python -m compileall -q app
-      - run: docker build -t goreecloud-calendar:test .
+      - name: Install application and security tooling
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e '.[dev]' pip-audit
+      - name: Dependency consistency
+        run: pip check
+      - name: Python vulnerability audit
+        run: pip-audit --strict
+      - name: Tests and coverage
+        run: pytest --cov=app --cov-report=term-missing --cov-fail-under=80
+      - name: Compile source
+        run: python -m compileall -q app
+      - name: Build hardened image
+        run: docker build -t goreecloud-calendar:test .
+      - name: Verify non-root image runtime
+        run: |
+          test "$(docker image inspect goreecloud-calendar:test --format '{{.Config.User}}')" = "65532:65532"
+      - name: Validate Compose configuration
+        run: docker compose config >/dev/null
+      - name: Container vulnerability and secret scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: goreecloud-calendar:test
+          format: table
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+          scanners: vuln,secret,misconfig
+      - name: Generate CycloneDX SBOM
+        uses: anchore/sbom-action@v0.24.0
+        with:
+          image: goreecloud-calendar:test
+          format: cyclonedx-json
+          output-file: goreecloud-calendar.sbom.cdx.json
+      - name: Retain SBOM evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: goreecloud-calendar-sbom
+          path: goreecloud-calendar.sbom.cdx.json
+          retention-days: 30
