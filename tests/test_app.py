@@ -4,7 +4,8 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 
-from app.auth import SessionStore
+from app import main
+from app.auth import SESSION_COOKIE, SessionStore
 from app.caldav import (
     CalDAVClient,
     CalDAVConflict,
@@ -17,8 +18,12 @@ from app.config import Settings
 from app.main import app
 
 
+def https_client() -> TestClient:
+    return TestClient(app, base_url='https://calendar.test')
+
+
 def test_health_is_minimized_and_hardened():
-    response = TestClient(app).get('/api/health')
+    response = https_client().get('/api/health')
     assert response.status_code == 200
     assert response.json() == {'status': 'ok'}
     assert response.headers['x-content-type-options'] == 'nosniff'
@@ -26,11 +31,24 @@ def test_health_is_minimized_and_hardened():
     assert response.headers['cross-origin-opener-policy'] == 'same-origin'
     assert response.headers['x-wardveil-security'] == 'Wardveil Security by GoreeCloud'
     assert response.headers['cache-control'] == 'no-store'
+    assert response.headers['strict-transport-security'] == 'max-age=31536000'
+    assert response.headers['x-robots-tag'] == 'noindex, nofollow, noarchive'
     assert response.headers['x-request-id']
 
 
+def test_valid_request_id_is_preserved():
+    response = https_client().get('/api/health', headers={'X-Request-ID': 'calendar-test-123'})
+    assert response.headers['x-request-id'] == 'calendar-test-123'
+
+
+def test_invalid_request_id_is_replaced():
+    response = https_client().get('/api/health', headers={'X-Request-ID': 'not allowed spaces'})
+    assert response.headers['x-request-id'] != 'not allowed spaces'
+    assert len(response.headers['x-request-id']) == 32
+
+
 def test_meta_is_secret_free_when_signed_out():
-    body = TestClient(app).get('/api/meta').json()
+    body = https_client().get('/api/meta').json()
     assert body['authenticated'] is False
     assert body['csrfToken'] is None
     assert body['glazeUi'] == '1.0'
@@ -39,8 +57,37 @@ def test_meta_is_secret_free_when_signed_out():
 
 
 def test_protected_calendar_api_requires_session():
-    response = TestClient(app).get('/api/events?start=2026-08-20&end=2026-08-21')
+    response = https_client().get('/api/events?start=2026-08-20&end=2026-08-21')
     assert response.status_code == 401
+
+
+def test_login_session_cookie_meta_csrf_and_logout(monkeypatch):
+    async def fake_authenticate(settings, store, username, password):
+        assert username == 'synthetic-user'
+        assert password == 'synthetic-password'
+        return store.create(username, password)
+
+    monkeypatch.setattr(main, 'authenticate', fake_authenticate)
+    client = https_client()
+    login = client.post('/api/session', json={'username': 'synthetic-user', 'password': 'synthetic-password'})
+    assert login.status_code == 200
+    csrf = login.json()['csrfToken']
+    cookie = login.headers['set-cookie'].lower()
+    assert 'httponly' in cookie
+    assert 'secure' in cookie
+    assert 'samesite=strict' in cookie
+    assert 'domain=' not in cookie
+
+    meta = client.get('/api/meta')
+    assert meta.status_code == 200
+    assert meta.json()['authenticated'] is True
+    assert meta.json()['csrfToken'] == csrf
+
+    denied = client.delete('/api/session')
+    assert denied.status_code == 403
+    logout = client.delete('/api/session', headers={'X-CSRF-Token': csrf})
+    assert logout.status_code == 204
+    assert client.get('/api/meta').json()['authenticated'] is False
 
 
 def test_session_store_is_bounded_and_opaque():
