@@ -76,11 +76,14 @@ async def authenticate(settings: Settings, store: SessionStore, username: str, p
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     client = CalDAVClient(settings, (username, password))
     try:
-        await client.list_calendars()
-    except CalDAVError as exc:
-        await sleep(0.25)
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials") from exc
-    return store.create(username, password)
+        try:
+            await client.list_calendars()
+        except CalDAVError as exc:
+            await sleep(0.25)
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials") from exc
+        return store.create(username, password)
+    finally:
+        await client.aclose()
 
 
 def set_session_cookie(response: Response, settings: Settings, session_id: str) -> None:
