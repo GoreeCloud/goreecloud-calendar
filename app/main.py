@@ -56,8 +56,6 @@ class EventWriteRequest(BaseModel):
 
 
 def current_session(request: Request) -> Session:
-    if not settings.passthrough_auth_enabled:
-        raise HTTPException(status_code=503, detail="Individual Calendar authentication is not enabled")
     return require_session(request, sessions)
 
 
@@ -112,8 +110,6 @@ async def meta(request: Request) -> dict[str, object]:
 
 @app.post("/api/session")
 async def login(payload: LoginRequest, response: Response, request: Request) -> dict[str, object]:
-    if not settings.passthrough_auth_enabled:
-        raise HTTPException(status_code=503, detail="Individual Calendar authentication is not enabled")
     try:
         session_id, session = await authenticate(settings, sessions, payload.username, payload.password)
     except HTTPException:
