@@ -1,68 +1,117 @@
 from datetime import date, timedelta
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, status
 from fastapi.responses import FileResponse
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
 
-from .caldav import CalDAVClient, CalDAVError
+from .auth import (
+    SESSION_COOKIE,
+    Session,
+    SessionStore,
+    authenticate,
+    clear_session_cookie,
+    require_csrf,
+    require_session,
+    set_session_cookie,
+)
+from .caldav import CalDAVClient, CalDAVConflict, CalDAVError, CalDAVPreconditionRequired
 from .config import settings
+from .observability import WardveilMiddleware, configure_logging, emit_event
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
-security = HTTPBasic(auto_error=False)
+configure_logging(settings.log_level)
+sessions = SessionStore(settings.session_ttl_seconds, settings.max_sessions)
 
 app = FastAPI(
     title="GoreeCloud Calendar",
-    version="0.1.0-dev",
+    version="0.2.0-rc1",
     docs_url=None,
     redoc_url=None,
     openapi_url=None,
 )
+app.add_middleware(WardveilMiddleware)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
-def caldav_client(
-    credentials: HTTPBasicCredentials | None = Depends(security),
-) -> CalDAVClient:
-    if settings.passthrough_auth_enabled:
-        if credentials is None or not credentials.username or not credentials.password:
-            raise HTTPException(
-                status_code=401,
-                detail="Calendar authentication is required",
-                headers={"WWW-Authenticate": 'Basic realm="GoreeCloud Calendar"'},
-            )
-        return CalDAVClient(settings, (credentials.username, credentials.password))
-    return CalDAVClient(settings)
+class LoginRequest(BaseModel):
+    username: str = Field(min_length=1, max_length=254)
+    password: str = Field(min_length=1, max_length=1024)
+
+
+class EventWriteRequest(BaseModel):
+    calendarHref: str = Field(min_length=1, max_length=2048)
+    resourceHref: str = Field(min_length=1, max_length=2048)
+    ical: str = Field(min_length=1, max_length=262144)
+    etag: str | None = Field(default=None, max_length=512)
+
+
+def current_session(request: Request) -> Session:
+    if not settings.passthrough_auth_enabled:
+        raise HTTPException(status_code=503, detail="Individual Calendar authentication is not enabled")
+    return require_session(request, sessions)
+
+
+def current_client(session: Session = Depends(current_session)) -> CalDAVClient:
+    return CalDAVClient(settings, (session.username, session.password))
+
+
+def mutation_error(exc: CalDAVError) -> HTTPException:
+    if isinstance(exc, CalDAVConflict):
+        return HTTPException(status_code=409, detail="The event changed elsewhere. Reload before trying again.")
+    if isinstance(exc, CalDAVPreconditionRequired):
+        return HTTPException(status_code=428, detail=str(exc))
+    return HTTPException(status_code=502, detail="The calendar service could not complete the change")
 
 
 @app.get("/api/health")
 async def health() -> dict[str, object]:
+    return {"status": "ok"}
+
+
+@app.get("/api/meta")
+async def meta(request: Request) -> dict[str, object]:
+    session = sessions.get(request.cookies.get(SESSION_COOKIE))
     return {
-        "status": "ok",
         "service": "goreecloud-calendar",
-        "caldavConfigured": settings.caldav_configured,
-        "authMode": settings.caldav_auth_mode,
+        "version": app.version,
+        "authenticated": session is not None,
         "writeEnabled": settings.writes_available,
+        "glazeUi": "1.0",
+        "securityIdentity": "Wardveil Security by GoreeCloud",
+        "csrfToken": session.csrf_token if session else None,
     }
 
 
+@app.post("/api/session")
+async def login(payload: LoginRequest, response: Response, request: Request) -> dict[str, object]:
+    if not settings.passthrough_auth_enabled:
+        raise HTTPException(status_code=503, detail="Individual Calendar authentication is not enabled")
+    session_id, session = await authenticate(settings, sessions, payload.username, payload.password)
+    set_session_cookie(response, settings, session_id)
+    emit_event("auth.login.success", request_id=request.state.request_id)
+    return {"authenticated": True, "csrfToken": session.csrf_token}
+
+
+@app.delete("/api/session", status_code=status.HTTP_204_NO_CONTENT)
+async def logout(request: Request, response: Response) -> Response:
+    sessions.delete(request.cookies.get(SESSION_COOKIE))
+    clear_session_cookie(response)
+    emit_event("auth.logout", request_id=request.state.request_id)
+    response.status_code = status.HTTP_204_NO_CONTENT
+    return response
+
+
 @app.get("/api/calendars")
-async def calendars(client: CalDAVClient = Depends(caldav_client)) -> dict[str, object]:
+async def calendars(client: CalDAVClient = Depends(current_client)) -> dict[str, object]:
     try:
         collections = await client.list_calendars()
     except CalDAVError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        raise HTTPException(status_code=502, detail="Calendar service is temporarily unavailable") from exc
     return {
-        "calendars": [
-            {
-                "id": item["href"],
-                "name": item["name"],
-                "color": item["color"],
-            }
-            for item in collections
-        ],
+        "calendars": [{"id": item["href"], "name": item["name"], "color": item["color"]} for item in collections],
         "readOnly": not settings.writes_available,
     }
 
@@ -71,7 +120,7 @@ async def calendars(client: CalDAVClient = Depends(caldav_client)) -> dict[str, 
 async def events(
     start: date = Query(...),
     end: date = Query(...),
-    client: CalDAVClient = Depends(caldav_client),
+    client: CalDAVClient = Depends(current_client),
 ) -> dict[str, object]:
     if end <= start:
         raise HTTPException(status_code=422, detail="end must be after start")
@@ -80,8 +129,57 @@ async def events(
     try:
         items = await client.list_events(start, end)
     except CalDAVError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        raise HTTPException(status_code=502, detail="Calendar service is temporarily unavailable") from exc
     return {"events": items, "readOnly": not settings.writes_available}
+
+
+@app.post("/api/events", status_code=status.HTTP_201_CREATED)
+async def create_event(payload: EventWriteRequest, request: Request, session: Session = Depends(current_session)) -> dict[str, object]:
+    if not settings.writes_available:
+        raise HTTPException(status_code=403, detail="Calendar writes are disabled")
+    require_csrf(request, session)
+    client = CalDAVClient(settings, (session.username, session.password))
+    try:
+        etag = await client.put_event(payload.calendarHref, payload.resourceHref, payload.ical, create=True)
+    except CalDAVError as exc:
+        raise mutation_error(exc) from exc
+    emit_event("calendar.event.create", request_id=request.state.request_id)
+    return {"etag": etag}
+
+
+@app.put("/api/events")
+async def update_event(payload: EventWriteRequest, request: Request, session: Session = Depends(current_session)) -> dict[str, object]:
+    if not settings.writes_available:
+        raise HTTPException(status_code=403, detail="Calendar writes are disabled")
+    require_csrf(request, session)
+    client = CalDAVClient(settings, (session.username, session.password))
+    try:
+        etag = await client.put_event(payload.calendarHref, payload.resourceHref, payload.ical, etag=payload.etag)
+    except CalDAVError as exc:
+        raise mutation_error(exc) from exc
+    emit_event("calendar.event.update", request_id=request.state.request_id)
+    return {"etag": etag}
+
+
+@app.delete("/api/events", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_event(
+    calendar_href: str = Query(..., alias="calendarHref", max_length=2048),
+    resource_href: str = Query(..., alias="resourceHref", max_length=2048),
+    etag: str = Query(..., max_length=512),
+    request: Request = None,
+    session: Session = Depends(current_session),
+) -> Response:
+    assert request is not None
+    if not settings.writes_available:
+        raise HTTPException(status_code=403, detail="Calendar writes are disabled")
+    require_csrf(request, session)
+    client = CalDAVClient(settings, (session.username, session.password))
+    try:
+        await client.delete_event(calendar_href, resource_href, etag=etag)
+    except CalDAVError as exc:
+        raise mutation_error(exc) from exc
+    emit_event("calendar.event.delete", request_id=request.state.request_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @app.get("/{path:path}")
