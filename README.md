@@ -1,58 +1,58 @@
 # GoreeCloud Calendar
 
-GoreeCloud Calendar is the native GoreeCloud calendar application. It provides a privacy-first, self-hosted web interface over the authoritative GoreeCloud CalDAV service.
+GoreeCloud Calendar is the native GoreeCloud calendar application: a privacy-first, self-hosted Glaze UI web experience over the authoritative GoreeCloud CalDAV service.
 
 ## Architecture
 
 - User-facing application: `https://calendar.goreecloud.com`
 - Authoritative CalDAV service: `https://dav.goreecloud.com`
-- Calendar data remains authoritative in Radicale/CalDAV. GoreeCloud Calendar does not maintain a competing calendar database.
-- The backend validates every CalDAV href against the configured DAV origin before following it.
-- Calendar event resources must remain descendants of their selected calendar collection before any mutation primitive can operate on them.
+- Radicale remains authoritative for calendar data, DAV identity, and collection authorization.
+- GoreeCloud Calendar does not maintain a competing calendar database or account database.
+- Production multi-user access uses individually attributable Radicale identities through a bounded application-session layer.
+- DAV hrefs are same-origin validated and event resources must remain descendants of their selected calendar collection before mutation.
 
-## Authentication modes
+## Security model
 
-The foundation supports two backend authentication modes:
+Wardveil Security by GoreeCloud is Calendar's security/protection identity and presentation layer. The technical controls remain explicit and independently testable:
 
-- `service` — the current read-only compatibility mode. CalDAV credentials are supplied through server-side environment configuration and are never embedded in browser assets.
-- `passthrough` — request-scoped identity mode. Each Calendar API request must authenticate with that user's own Radicale credentials, and only that identity is forwarded to CalDAV.
+- opaque HttpOnly/Secure/SameSite session cookies
+- server-memory-only DAV credentials with bounded session lifetime and capacity
+- session-bound CSRF verification for create/update/delete
+- `If-None-Match: *` create protection
+- mandatory current `If-Match` ETags for update/delete
+- explicit stale-resource conflict handling
+- HTTPS-only configured DAV origin
+- selected-calendar resource containment
+- 256 KiB iCalendar mutation limit and structural validation
+- CSP, frame denial, MIME-sniffing prevention, no-referrer policy, browser isolation, restrictive Permissions Policy, no-store responses, and no-index metadata
+- privacy-minimized structured request/security events with bounded request correlation
 
-Passthrough authentication is the required identity model for future multi-user write support. It prevents one shared application credential from becoming the authorization boundary for multiple users.
+Broad observability deliberately excludes credentials, usernames, cookies, session/CSRF values, request bodies, calendar content, client IP addresses, user-agent strings, and raw upstream exception details.
 
-## Current foundation
+## Glaze UI 1.0
 
-The application currently provides:
+The complete controlled experience uses Glaze UI 1.0, including:
 
-- FastAPI backend and health endpoint
-- server-side CalDAV home and calendar-collection discovery
-- multiple-calendar event retrieval with calendar identity and color metadata
-- resource href and ETag preservation
-- bounded upstream timeouts and fail-closed configuration
-- iCalendar line unfolding, text unescaping, all-day detection, timezone metadata, and recurrence metadata preservation
-- normalized event API for the browser
-- responsive Glaze UI month/agenda experience
-- System, Light, and Dark appearance modes stored locally in the browser
-- accessible keyboard/focus treatment and reduced-motion support
-- Docker/Compose development packaging
-- automated backend tests and GitHub Actions CI
+- authentication, navigation, calendar filters, month view, agenda, event dialogs, notices, toasts, loading, empty, error, disabled, success, warning, and destructive states
+- semantic design tokens and the Canvas/Solid/Raised/Glaze/Overlay hierarchy
+- System, Light, and Dark appearance stored locally in the browser
+- Compact, Medium, Expanded, and Wide adaptive ranges
+- keyboard focus, practical targets, reduced motion, reduced transparency, increased contrast, forced colors, and solid translucency fallbacks
+- no remote fonts, icons, UI frameworks, analytics, or tracking dependencies
 
-## Conditional-write foundation
+See `docs/GLAZE_UI_CONFORMANCE.md`.
 
-Internal CalDAV mutation primitives are implemented but are **not exposed as Calendar HTTP CRUD endpoints**.
+## Authentication and writes
 
-The write foundation enforces:
+Production defaults to `CALDAV_AUTH_MODE=passthrough`. A successful sign-in validates the individual's Radicale identity and creates an opaque application session. DAV credentials remain only in bounded server memory for the session lifetime.
 
-- `CALDAV_WRITE_ENABLED=false` by default
-- passthrough authentication as a prerequisite for write availability
-- `If-None-Match: *` when creating a new event resource
-- mandatory `If-Match` with the current ETag when updating or deleting an existing event
-- HTTP `412 Precondition Failed` conversion to an explicit conflict condition
-- same-origin DAV href validation
-- selected-calendar resource containment checks
-- a 256 KiB iCalendar payload safety limit
-- minimum VCALENDAR/VEVENT structural validation
+`CALDAV_WRITE_ENABLED=false` remains the secure default. When explicitly enabled after the required acceptance gates, Calendar exposes guarded create/update/delete workflows. Recurring events remain protected from the simplified editor because recurrence-series and exception semantics must not be silently rewritten; users may view recurring events normally and use an approved CalDAV client for recurrence changes until a recurrence-native editor is separately validated.
 
-These primitives exist so isolated synthetic Radicale testing can validate conflict semantics before any browser mutation path is enabled.
+## Runtime
+
+The container runs as UID/GID `65532:65532`, drops Linux capabilities, enables `no-new-privileges`, uses a read-only root filesystem with bounded `/tmp`, and publishes no host port through the repository Compose topology. Network egress remains available because Calendar must reach `https://dav.goreecloud.com`; deployment-time Caddy/private-network attachment remains a separate controlled infrastructure action.
+
+The production image currently targets the supported Python `3.12.13-slim-bookworm` line. CI performs dependency auditing, tests/coverage, compilation, non-root runtime verification, Compose validation, HIGH/CRITICAL container vulnerability and secret/misconfiguration scanning, and CycloneDX SBOM generation.
 
 ## Development
 
@@ -61,16 +61,17 @@ python -m venv .venv
 . .venv/bin/activate
 pip install -e '.[dev]'
 cp .env.example .env
+# For local HTTP only, set SECURE_COOKIES=false in the untracked .env file.
 uvicorn app.main:app --reload
 ```
 
 Then open `http://127.0.0.1:8000`.
 
-## Safety and remaining gates
+## Production readiness
 
-The user-facing Calendar application remains read-only. Event create/update/delete API routes must not be added until request-scoped identity behavior, isolated Radicale conditional writes, recurrence compatibility, backup/recovery, and production acceptance are validated.
+Source hardening does not authorize production cutover. `docs/PRODUCTION_READINESS.md` defines the fail-closed release gates for isolated synthetic Radicale write testing, collection isolation, recurrence compatibility, backup/restore, Caddy/TLS/private DNS/NetBird behavior, monitoring, rollback, manual Glaze/accessibility acceptance, and explicit cutover approval.
 
-No development step should change production DNS, Caddy, NetBird, Radicale accounts, existing calendar data, or production publication without a separate controlled deployment and validation process.
+No source-development step should modify production DNS, Caddy, NetBird, firewall policy, Radicale accounts, production calendar data, backup state, or monitoring configuration without a separate controlled deployment and validation process.
 
 ## License
 
