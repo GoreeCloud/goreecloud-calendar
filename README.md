@@ -13,18 +13,24 @@ The shared Radicale service at `https://dav.goreecloud.com` remains the authorit
 The repository now includes:
 
 - timezone-safe calendar event domain primitives and busy-interval merging;
-- a fail-closed CalDAV transport foundation with HTTPS-only configuration, cross-origin refusal, authenticated discovery, ETag-protected writes/deletes, and iCalendar serialization;
+- deterministic month, week, day, and agenda view-window projections;
+- versioned first-party event-view and privacy-minimized busy-time API contracts;
+- a fail-closed CalDAV transport foundation with HTTPS-only configuration, cross-origin refusal, authenticated discovery, bounded calendar-query reads, ETag-protected writes/deletes, and iCalendar serialization;
+- a Glaze UI 1.3 application shell with responsive view switching, date navigation, event rendering, event-creation workflow, keyboard focus treatment, reduced-motion/transparency handling, and forced-colors support;
 - the strict GoreeCloud Tasks projection consumer and bidirectional Tasks integration contract;
-- Glaze UI 1.3 baseline tokens/components with accessibility and resilience fallbacks;
 - dependency-free unit/contract tests suitable for CI.
 
 This is a source foundation, not production acceptance. Production publication, production DAV credentials, user migration, monitoring, backup/recovery evidence, and live target-environment validation remain separate controlled work.
+
+## CalDAV compatibility boundary
+
+The initial read parser intentionally accepts the UTC VEVENT subset the GoreeCloud Calendar serializer emits. Full third-party CalDAV compatibility still requires recurrence and exceptions, VTIMEZONE/TZID handling, attendees and scheduling, alarms, all-day DATE values, arbitrary extension preservation, and broader RFC interoperability tests. Unsupported semantics must fail closed or remain opaque rather than being silently rewritten.
 
 ## First-party Tasks integration
 
 GoreeCloud Calendar and GoreeCloud Tasks are peer first-party applications. Calendar remains authoritative for native event semantics and authorized busy-time context; Tasks remains authoritative for task content, workflow, completion, assignment, and recurrence.
 
-Integration uses versioned application APIs. Neither application may read or write the other's database directly or broaden a user's permissions through a service credential. See `docs/tasks-integration-contract.md`.
+Integration uses versioned application APIs. Neither application may read or write the other's database directly or broaden a user's permissions through a service credential. The Calendar busy-time contract exposes only occupied intervals; it does not expose event titles, descriptions, locations, or calendar membership to Tasks. See `docs/tasks-integration-contract.md`.
 
 ## Architecture and readiness
 
