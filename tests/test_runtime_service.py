@@ -57,7 +57,12 @@ class RuntimeServiceTests(unittest.TestCase):
             principal=self.reader,
             method="GET",
             path="/api/v1/events",
-            query={"calendar": "/other/calendar/", "view": "day", "anchor": self.anchor.isoformat()},
+            query={
+                "calendar": "/other/calendar/",
+                "view": "day",
+                "anchor": self.anchor.date().isoformat(),
+                "timezone": "UTC",
+            },
         )
         self.assertEqual(response.status, 403)
         self.assertEqual(json.loads(response.body), {"error": "forbidden"})
@@ -142,6 +147,32 @@ class RuntimeServiceTests(unittest.TestCase):
         )
         self.assertEqual(response.status, 400)
         self.assertEqual(self.store.deleted, [])
+
+    def test_authorized_event_view_uses_existing_contract(self):
+        self.store.events.append(CalendarEvent(
+            uid="visible@example.test",
+            title="Visible event",
+            starts_at=self.anchor,
+            ends_at=self.anchor + timedelta(hours=1),
+            calendar_href="/u/reader/calendar/",
+        ))
+        response = dispatch(
+            service=self.service,
+            principal=self.reader,
+            method="GET",
+            path="/api/v1/events",
+            query={
+                "calendar": "/u/reader/calendar/",
+                "view": "day",
+                "anchor": self.anchor.date().isoformat(),
+                "timezone": "UTC",
+            },
+        )
+        self.assertEqual(response.status, 200)
+        payload = json.loads(response.body)
+        self.assertEqual(payload["schema"], "goreecloud.calendar.events.v1")
+        self.assertEqual(payload["returned"], 1)
+        self.assertEqual(payload["events"][0]["uid"], "visible@example.test")
 
 
 if __name__ == "__main__":
