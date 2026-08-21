@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from typing import Protocol
 
-from goreecloud_calendar.api import busy_time_payload, event_view_payload
+from goreecloud_calendar.api import busy_payload, view_payload
 from goreecloud_calendar.auth import CalendarPrincipal
 from goreecloud_calendar.events import CalendarEvent
+from goreecloud_calendar.views import build_view_window
 
 
 class CalendarStore(Protocol):
@@ -33,16 +34,21 @@ class CalendarService:
         principal: CalendarPrincipal,
         calendar_href: str,
         view: str,
-        anchor: datetime,
+        anchor: date,
+        timezone_name: str,
     ) -> dict[str, object]:
         principal.require_calendar(calendar_href)
-        # event_view_payload owns deterministic view-window calculation and filtering.
-        return event_view_payload(
-            view=view,
+        window = build_view_window(mode=view, anchor=anchor, timezone_name=timezone_name)
+        events = self.store.query_events(
+            calendar_href=calendar_href,
+            starts_at=window.starts_at,
+            ends_at=window.ends_at,
+        )
+        return view_payload(
+            events=events,
+            mode=window.mode,
             anchor=anchor,
-            events_provider=lambda start, end: self.store.query_events(
-                calendar_href=calendar_href, starts_at=start, ends_at=end
-            ),
+            timezone_name=timezone_name,
         )
 
     def busy_time(
@@ -57,7 +63,7 @@ class CalendarService:
         events = self.store.query_events(
             calendar_href=calendar_href, starts_at=starts_at, ends_at=ends_at
         )
-        return busy_time_payload(starts_at=starts_at, ends_at=ends_at, events=events)
+        return busy_payload(events=events, starts_at=starts_at, ends_at=ends_at)
 
     def save_event(
         self,
