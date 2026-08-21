@@ -1,13 +1,39 @@
 # GoreeCloud Calendar
 
-Native GoreeCloud calendar application. Active development is performed through reviewed feature branches and pull requests.
+Privacy-first, self-hosted calendar application for the GoreeCloud Suite.
 
-## First-party integration
+## Role
 
-GoreeCloud Calendar and GoreeCloud Tasks are peer first-party applications and are designed to integrate in both directions.
+GoreeCloud Calendar is the user-facing application for calendars, events, scheduling, agenda and availability workflows. Its canonical application address is `https://calendar.goreecloud.com`.
 
-Calendar remains authoritative for native calendar events, calendar membership, event scheduling semantics, and calendar-specific metadata. Tasks remains authoritative for task content, task workflow, assignment, project membership, completion, recurrence, and task-specific authorization.
+The shared Radicale service at `https://dav.goreecloud.com` remains the authoritative CalDAV service. Calendar is an application and presentation layer over that standards-based data boundary rather than a second authoritative calendar store.
 
-The integration must use versioned application APIs. Neither application may read or write the other's database directly, and neither service may broaden a user's permissions through integration.
+## Current foundation
 
-See `docs/tasks-integration-contract.md` for the initial cross-application contract and implementation boundary.
+The repository now includes:
+
+- timezone-safe calendar event domain primitives and busy-interval merging;
+- a fail-closed CalDAV transport foundation with HTTPS-only configuration, cross-origin refusal, authenticated discovery, ETag-protected writes/deletes, and iCalendar serialization;
+- the strict GoreeCloud Tasks projection consumer and bidirectional Tasks integration contract;
+- Glaze UI 1.3 baseline tokens/components with accessibility and resilience fallbacks;
+- dependency-free unit/contract tests suitable for CI.
+
+This is a source foundation, not production acceptance. Production publication, production DAV credentials, user migration, monitoring, backup/recovery evidence, and live target-environment validation remain separate controlled work.
+
+## First-party Tasks integration
+
+GoreeCloud Calendar and GoreeCloud Tasks are peer first-party applications. Calendar remains authoritative for native event semantics and authorized busy-time context; Tasks remains authoritative for task content, workflow, completion, assignment, and recurrence.
+
+Integration uses versioned application APIs. Neither application may read or write the other's database directly or broaden a user's permissions through a service credential. See `docs/tasks-integration-contract.md`.
+
+## Architecture and readiness
+
+See `docs/product-foundation.md` for product scope, DAV boundaries, Glaze UI expectations, security/privacy requirements, and production-readiness gates.
+
+## Development
+
+Run the dependency-free test suite with:
+
+```bash
+python -m unittest discover -s tests -v
+```

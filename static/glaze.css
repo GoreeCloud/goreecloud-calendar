@@ -1,0 +1,87 @@
+:root {
+  color-scheme: light dark;
+  --gc-canvas: #f4f6fb;
+  --gc-surface: rgba(255, 255, 255, 0.88);
+  --gc-raised: rgba(255, 255, 255, 0.96);
+  --gc-border: rgba(24, 31, 49, 0.12);
+  --gc-text: #171b26;
+  --gc-muted: #61697b;
+  --gc-accent: #476cff;
+  --gc-focus: #3157ef;
+  --gc-radius-control: 16px;
+  --gc-radius-panel: 24px;
+  --gc-shadow-raised: 0 12px 36px rgba(26, 34, 54, 0.12);
+  --gc-gutter: clamp(16px, 4vw, 36px);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --gc-canvas: #0e1118;
+    --gc-surface: rgba(25, 30, 42, 0.86);
+    --gc-raised: rgba(31, 37, 51, 0.96);
+    --gc-border: rgba(238, 242, 255, 0.14);
+    --gc-text: #f3f5fb;
+    --gc-muted: #aab2c4;
+    --gc-accent: #8fa5ff;
+    --gc-focus: #b7c5ff;
+    --gc-shadow-raised: 0 14px 42px rgba(0, 0, 0, 0.3);
+  }
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--gc-canvas);
+  color: var(--gc-text);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.gc-shell { padding: var(--gc-gutter); }
+.gc-surface {
+  background: var(--gc-surface);
+  border: 1px solid var(--gc-border);
+  border-radius: var(--gc-radius-panel);
+  box-shadow: var(--gc-shadow-raised);
+}
+.gc-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.gc-button, .gc-icon-button {
+  min-height: 44px;
+  border: 1px solid var(--gc-border);
+  border-radius: var(--gc-radius-control);
+  background: var(--gc-raised);
+  color: var(--gc-text);
+  font: inherit;
+}
+.gc-button { padding: 10px 16px; }
+.gc-icon-button { min-width: 44px; padding: 10px; }
+.gc-button:focus-visible, .gc-icon-button:focus-visible, .gc-field:focus-visible {
+  outline: 3px solid var(--gc-focus);
+  outline-offset: 3px;
+}
+.gc-field {
+  min-height: 44px;
+  border: 1px solid var(--gc-border);
+  border-radius: var(--gc-radius-control);
+  background: var(--gc-raised);
+  color: var(--gc-text);
+  padding: 10px 14px;
+}
+
+@supports (backdrop-filter: blur(18px)) {
+  .gc-glaze { backdrop-filter: blur(18px) saturate(1.08); }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .gc-surface, .gc-glaze { background: var(--gc-raised); backdrop-filter: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; }
+}
+@media (forced-colors: active) {
+  .gc-surface, .gc-button, .gc-icon-button, .gc-field { border: 1px solid CanvasText; box-shadow: none; }
+}
