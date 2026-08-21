@@ -1,0 +1,1 @@
+"""GoreeCloud Calendar application package."""
