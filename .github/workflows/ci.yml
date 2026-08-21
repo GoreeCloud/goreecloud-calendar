@@ -10,9 +10,14 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: calendar-ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  contract-tests:
+  test:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -20,5 +25,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Run Tasks projection contract tests
+      - name: Compile application source
+        run: python -m compileall -q goreecloud_calendar tests
+      - name: Run Calendar unit and integration-contract tests
         run: python -m unittest discover -s tests -v
