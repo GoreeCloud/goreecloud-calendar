@@ -1,8 +1,9 @@
 """Dependency-free JSON HTTP adapter for the Calendar runtime service.
 
 This module is intentionally framework-neutral. It converts already-authenticated request
-context into typed service calls. ``secure_dispatch`` additionally applies trusted browser
-origin, CSRF, and optional rate-limit controls before requests reach the application service.
+context into typed service calls. ``secure_dispatch`` applies trusted browser origin, CSRF, and
+optional rate-limit controls. ``authenticated_dispatch`` additionally resolves an opaque,
+server-derived session handle before any Calendar API authorization or mutation occurs.
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ from goreecloud_calendar.security import (
     enforce_browser_request,
 )
 from goreecloud_calendar.service import CalendarService
+from goreecloud_calendar.session import CalendarSessionAuthenticator, CalendarSessionError
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,12 +147,7 @@ def secure_dispatch(
     payload: dict[str, Any] | None = None,
     rate_limiter: InMemoryRateLimiter | None = None,
 ) -> HTTPResponse:
-    """Apply server-derived browser security controls, then dispatch the Calendar API.
-
-    Rate limiting uses the authenticated principal subject rather than request content. Security
-    failures return a deliberately low-detail response so rejected requests do not reveal which
-    trust check failed.
-    """
+    """Apply server-derived browser security controls, then dispatch the Calendar API."""
 
     try:
         enforce_browser_request(
@@ -168,4 +165,40 @@ def secure_dispatch(
         path=path,
         query=query,
         payload=payload,
+    )
+
+
+def authenticated_dispatch(
+    *,
+    service: CalendarService,
+    authenticator: CalendarSessionAuthenticator,
+    session_handle: str,
+    request_context: TrustedRequestContext,
+    method: str,
+    path: str,
+    query: dict[str, str] | None = None,
+    payload: dict[str, Any] | None = None,
+    rate_limiter: InMemoryRateLimiter | None = None,
+    now: datetime | None = None,
+) -> HTTPResponse:
+    """Resolve a trusted session, then apply browser security and Calendar authorization.
+
+    The session handle must come from trusted server/framework request handling (for example a
+    protected session cookie). Identity, audience, expiry, calendar scope, and write capability
+    are never accepted from the API query or JSON body.
+    """
+
+    try:
+        principal = authenticator.authenticate(session_handle, now=now)
+    except CalendarSessionError:
+        return _json(401, {"error": "authentication_required"})
+    return secure_dispatch(
+        service=service,
+        principal=principal,
+        request_context=request_context,
+        method=method,
+        path=path,
+        query=query,
+        payload=payload,
+        rate_limiter=rate_limiter,
     )
