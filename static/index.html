@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>GoreeCloud Calendar</title>
+  <link rel="stylesheet" href="./glaze.css">
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#calendar-main">Skip to calendar</a>
+  <div class="calendar-app" data-calendar-app>
+    <header class="app-bar glaze-surface">
+      <div>
+        <p class="eyebrow">GoreeCloud Suite</p>
+        <h1>Calendar</h1>
+      </div>
+      <div class="app-actions" aria-label="Calendar actions">
+        <button type="button" data-action="today">Today</button>
+        <button type="button" class="primary" data-action="new-event">New event</button>
+      </div>
+    </header>
+
+    <nav class="view-switcher glaze-surface" aria-label="Calendar view">
+      <button type="button" data-view="month" aria-pressed="true">Month</button>
+      <button type="button" data-view="week" aria-pressed="false">Week</button>
+      <button type="button" data-view="day" aria-pressed="false">Day</button>
+      <button type="button" data-view="agenda" aria-pressed="false">Agenda</button>
+    </nav>
+
+    <main id="calendar-main" tabindex="-1">
+      <section class="calendar-toolbar" aria-label="Date navigation">
+        <button type="button" data-action="previous" aria-label="Previous period">‹</button>
+        <div>
+          <p class="eyebrow" data-view-label>Month view</p>
+          <h2 data-period-label aria-live="polite">Calendar</h2>
+        </div>
+        <button type="button" data-action="next" aria-label="Next period">›</button>
+      </section>
+
+      <div class="status-banner" data-status role="status" hidden></div>
+      <section class="calendar-stage glaze-surface" data-calendar-stage aria-busy="true">
+        <p class="empty-state">Loading calendar…</p>
+      </section>
+    </main>
+  </div>
+
+  <dialog data-event-dialog aria-labelledby="event-dialog-title">
+    <form method="dialog" data-event-form>
+      <header>
+        <h2 id="event-dialog-title">New event</h2>
+        <button type="button" data-action="close-dialog" aria-label="Close">×</button>
+      </header>
+      <label>Title<input name="title" required maxlength="200" autocomplete="off"></label>
+      <div class="form-row">
+        <label>Starts<input name="starts_at" type="datetime-local" required></label>
+        <label>Ends<input name="ends_at" type="datetime-local" required></label>
+      </div>
+      <label>Location<input name="location" maxlength="500" autocomplete="off"></label>
+      <label>Description<textarea name="description" rows="4" maxlength="10000"></textarea></label>
+      <footer>
+        <button type="button" data-action="close-dialog">Cancel</button>
+        <button type="submit" class="primary">Save event</button>
+      </footer>
+    </form>
+  </dialog>
+</body>
+</html>
