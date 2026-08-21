@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from goreecloud_calendar.auth import CalendarAuthorizationError, CalendarPrincipal
@@ -37,6 +37,12 @@ def _parse_dt(value: Any, field: str) -> datetime:
     return parsed
 
 
+def _parse_date(value: Any, field: str) -> date:
+    if not isinstance(value, str):
+        raise ValueError(f"{field} is required")
+    return date.fromisoformat(value)
+
+
 def dispatch(
     *,
     service: CalendarService,
@@ -60,10 +66,15 @@ def dispatch(
             raise ValueError("calendar is required")
 
         if method == "GET" and path == "/api/v1/events":
-            anchor = _parse_dt(query.get("anchor"), "anchor")
+            anchor = _parse_date(query.get("anchor"), "anchor")
             view = query.get("view", "month")
+            timezone_name = query.get("timezone", "UTC")
             return _json(200, service.list_events(
-                principal=principal, calendar_href=calendar_href, view=view, anchor=anchor
+                principal=principal,
+                calendar_href=calendar_href,
+                view=view,
+                anchor=anchor,
+                timezone_name=timezone_name,
             ))
 
         if method == "GET" and path == "/api/v1/busy-time":
