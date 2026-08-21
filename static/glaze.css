@@ -8,6 +8,7 @@
   --gc-muted: #61697b;
   --gc-accent: #476cff;
   --gc-focus: #3157ef;
+  --gc-danger: #b42318;
   --gc-radius-control: 16px;
   --gc-radius-panel: 24px;
   --gc-shadow-raised: 0 12px 36px rgba(26, 34, 54, 0.12);
@@ -24,6 +25,7 @@
     --gc-muted: #aab2c4;
     --gc-accent: #8fa5ff;
     --gc-focus: #b7c5ff;
+    --gc-danger: #ffb4ab;
     --gc-shadow-raised: 0 14px 42px rgba(0, 0, 0, 0.3);
   }
 }
@@ -36,52 +38,97 @@ body {
   color: var(--gc-text);
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
+button, input, textarea { font: inherit; }
+button, input, textarea {
+  min-height: 44px;
+  border: 1px solid var(--gc-border);
+  border-radius: var(--gc-radius-control);
+  background: var(--gc-raised);
+  color: var(--gc-text);
+}
+button { padding: 10px 16px; cursor: pointer; }
+input, textarea { width: 100%; padding: 10px 14px; }
+textarea { resize: vertical; }
+button.primary { background: var(--gc-accent); color: #fff; border-color: transparent; }
+button:focus-visible, input:focus-visible, textarea:focus-visible, [tabindex="-1"]:focus-visible {
+  outline: 3px solid var(--gc-focus);
+  outline-offset: 3px;
+}
 
-.gc-shell { padding: var(--gc-gutter); }
-.gc-surface {
+.skip-link {
+  position: fixed;
+  inset: 8px auto auto 8px;
+  z-index: 100;
+  transform: translateY(-150%);
+  background: var(--gc-raised);
+  color: var(--gc-text);
+  padding: 10px 14px;
+  border-radius: var(--gc-radius-control);
+}
+.skip-link:focus { transform: translateY(0); }
+
+.calendar-app { width: min(1440px, 100%); margin: 0 auto; padding: var(--gc-gutter); }
+.glaze-surface {
   background: var(--gc-surface);
   border: 1px solid var(--gc-border);
   border-radius: var(--gc-radius-panel);
   box-shadow: var(--gc-shadow-raised);
 }
-.gc-toolbar {
+.app-bar, .calendar-toolbar, .view-switcher, .app-actions, .form-row, dialog header, dialog footer {
   display: flex;
   align-items: center;
   gap: 12px;
-  flex-wrap: wrap;
 }
-.gc-button, .gc-icon-button {
-  min-height: 44px;
+.app-bar { justify-content: space-between; padding: 18px 20px; }
+.app-bar h1, .calendar-toolbar h2, dialog h2 { margin: 0; }
+.eyebrow { margin: 0 0 4px; color: var(--gc-muted); font-size: .82rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.view-switcher { margin: 16px 0; padding: 8px; width: fit-content; max-width: 100%; overflow-x: auto; }
+.view-switcher button[aria-pressed="true"] { background: var(--gc-accent); color: #fff; border-color: transparent; }
+.calendar-toolbar { justify-content: center; padding: 8px 0 18px; }
+.calendar-toolbar > div { min-width: min(420px, 60vw); text-align: center; }
+.calendar-toolbar button { min-width: 48px; font-size: 1.4rem; }
+.calendar-stage { min-height: 420px; padding: clamp(14px, 2vw, 24px); }
+.event-list { display: grid; gap: 12px; }
+.view-month { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.event-card { border: 1px solid var(--gc-border); border-radius: 18px; background: var(--gc-raised); padding: 14px; }
+.event-card h3 { margin: 0 0 6px; font-size: 1rem; }
+.event-card p { margin: 4px 0 0; color: var(--gc-muted); }
+.event-time { font-size: .9rem; }
+.empty-state { color: var(--gc-muted); text-align: center; padding: 80px 16px; }
+.status-banner { margin: 0 0 12px; padding: 12px 14px; border: 1px solid var(--gc-border); border-radius: 14px; background: var(--gc-raised); }
+.status-banner[data-kind="error"] { color: var(--gc-danger); }
+
+dialog {
+  width: min(640px, calc(100% - 24px));
   border: 1px solid var(--gc-border);
-  border-radius: var(--gc-radius-control);
+  border-radius: var(--gc-radius-panel);
   background: var(--gc-raised);
   color: var(--gc-text);
-  font: inherit;
+  box-shadow: var(--gc-shadow-raised);
+  padding: 20px;
 }
-.gc-button { padding: 10px 16px; }
-.gc-icon-button { min-width: 44px; padding: 10px; }
-.gc-button:focus-visible, .gc-icon-button:focus-visible, .gc-field:focus-visible {
-  outline: 3px solid var(--gc-focus);
-  outline-offset: 3px;
-}
-.gc-field {
-  min-height: 44px;
-  border: 1px solid var(--gc-border);
-  border-radius: var(--gc-radius-control);
-  background: var(--gc-raised);
-  color: var(--gc-text);
-  padding: 10px 14px;
-}
+dialog::backdrop { background: rgba(0, 0, 0, .42); }
+dialog header { justify-content: space-between; }
+dialog form { display: grid; gap: 14px; }
+dialog label { display: grid; gap: 6px; font-weight: 650; }
+dialog footer { justify-content: flex-end; }
+.form-row > * { flex: 1; }
 
 @supports (backdrop-filter: blur(18px)) {
-  .gc-glaze { backdrop-filter: blur(18px) saturate(1.08); }
+  .glaze-surface { backdrop-filter: blur(18px) saturate(1.08); }
+}
+@media (max-width: 700px) {
+  .app-bar { align-items: flex-start; }
+  .app-actions { flex-direction: column-reverse; align-items: stretch; }
+  .form-row { flex-direction: column; align-items: stretch; }
+  .calendar-toolbar > div { min-width: 0; flex: 1; }
 }
 @media (prefers-reduced-transparency: reduce) {
-  .gc-surface, .gc-glaze { background: var(--gc-raised); backdrop-filter: none; }
+  .glaze-surface { background: var(--gc-raised); backdrop-filter: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; }
 }
 @media (forced-colors: active) {
-  .gc-surface, .gc-button, .gc-icon-button, .gc-field { border: 1px solid CanvasText; box-shadow: none; }
+  .glaze-surface, button, input, textarea, .event-card, .status-banner { border: 1px solid CanvasText; box-shadow: none; }
 }
