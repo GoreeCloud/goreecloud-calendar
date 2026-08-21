@@ -1,8 +1,8 @@
 """Dependency-free JSON HTTP adapter for the Calendar runtime service.
 
 This module is intentionally framework-neutral. It converts already-authenticated request
-context into typed service calls; authentication middleware and production secret retrieval are
-separate deployment concerns.
+context into typed service calls. ``secure_dispatch`` additionally applies trusted browser
+origin, CSRF, and optional rate-limit controls before requests reach the application service.
 """
 
 from __future__ import annotations
@@ -14,6 +14,12 @@ from typing import Any
 
 from goreecloud_calendar.auth import CalendarAuthorizationError, CalendarPrincipal
 from goreecloud_calendar.events import CalendarEvent, CalendarEventError
+from goreecloud_calendar.security import (
+    CalendarRequestSecurityError,
+    InMemoryRateLimiter,
+    TrustedRequestContext,
+    enforce_browser_request,
+)
 from goreecloud_calendar.service import CalendarService
 
 
@@ -52,11 +58,7 @@ def dispatch(
     query: dict[str, str] | None = None,
     payload: dict[str, Any] | None = None,
 ) -> HTTPResponse:
-    """Dispatch the first versioned Calendar API surface.
-
-    The caller supplies an authenticated principal. This adapter never accepts an identity from
-    request JSON, preventing clients from self-asserting authorization scope.
-    """
+    """Dispatch the versioned Calendar API for an already-authorized principal."""
 
     query = query or {}
     payload = payload or {}
@@ -130,3 +132,40 @@ def dispatch(
         return _json(403, {"error": "forbidden"})
     except (CalendarEventError, ValueError):
         return _json(400, {"error": "invalid_request"})
+
+
+def secure_dispatch(
+    *,
+    service: CalendarService,
+    principal: CalendarPrincipal,
+    request_context: TrustedRequestContext,
+    method: str,
+    path: str,
+    query: dict[str, str] | None = None,
+    payload: dict[str, Any] | None = None,
+    rate_limiter: InMemoryRateLimiter | None = None,
+) -> HTTPResponse:
+    """Apply server-derived browser security controls, then dispatch the Calendar API.
+
+    Rate limiting uses the authenticated principal subject rather than request content. Security
+    failures return a deliberately low-detail response so rejected requests do not reveal which
+    trust check failed.
+    """
+
+    try:
+        enforce_browser_request(
+            context=request_context,
+            method=method,
+            rate_limiter=rate_limiter,
+            rate_key=principal.subject if rate_limiter is not None else None,
+        )
+    except CalendarRequestSecurityError:
+        return _json(403, {"error": "request_rejected"})
+    return dispatch(
+        service=service,
+        principal=principal,
+        method=method,
+        path=path,
+        query=query,
+        payload=payload,
+    )
