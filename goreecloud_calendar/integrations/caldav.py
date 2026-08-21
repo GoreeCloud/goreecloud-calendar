@@ -10,7 +10,7 @@ from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
 from xml.etree import ElementTree
 
-from goreecloud_calendar.events import CalendarEvent, CalendarEventError
+from goreecloud_calendar.events import CalendarEvent
 
 
 class CalDAVError(RuntimeError):
@@ -37,10 +37,29 @@ def _escape_ical(value: str) -> str:
     )
 
 
+def _unescape_ical(value: str) -> str:
+    return (
+        value.replace("\\n", "\n")
+        .replace("\\N", "\n")
+        .replace("\\,", ",")
+        .replace("\\;", ";")
+        .replace("\\\\", "\\")
+    )
+
+
 def _format_utc(value: datetime) -> str:
     if value.tzinfo is None or value.utcoffset() is None:
         raise CalDAVError("iCalendar timestamps must be timezone-aware.")
     return value.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def _parse_utc(value: str) -> datetime:
+    if not value.endswith("Z"):
+        raise CalDAVError("Only UTC VEVENT timestamps are accepted by the initial parser.")
+    try:
+        return datetime.strptime(value, "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
+    except ValueError as exc:
+        raise CalDAVError("Invalid VEVENT UTC timestamp.") from exc
 
 
 def serialize_event(event: CalendarEvent, *, sequence: int = 0) -> str:
@@ -66,6 +85,46 @@ def serialize_event(event: CalendarEvent, *, sequence: int = 0) -> str:
         lines.append(f"LOCATION:{_escape_ical(event.location)}")
     lines.extend(["END:VEVENT", "END:VCALENDAR", ""])
     return "\r\n".join(lines)
+
+
+def parse_event(payload: str, *, calendar_href: str | None = None, etag: str | None = None) -> CalendarEvent:
+    """Parse the intentionally small VEVENT subset emitted by Calendar.
+
+    Unknown properties are ignored. Recurrence, timezone components, attendees, alarms, and
+    arbitrary third-party iCalendar extensions are deliberately not accepted as first-class
+    semantics yet; they remain a later compatibility milestone rather than being guessed.
+    """
+
+    unfolded = payload.replace("\r\n ", "").replace("\n ", "")
+    lines = unfolded.replace("\r\n", "\n").split("\n")
+    try:
+        start = lines.index("BEGIN:VEVENT")
+        end = lines.index("END:VEVENT", start + 1)
+    except ValueError as exc:
+        raise CalDAVError("Calendar data does not contain one valid VEVENT.") from exc
+
+    values: dict[str, str] = {}
+    for line in lines[start + 1 : end]:
+        if ":" not in line:
+            continue
+        name, value = line.split(":", 1)
+        name = name.split(";", 1)[0].upper()
+        if name in {"UID", "SUMMARY", "DTSTART", "DTEND", "DESCRIPTION", "LOCATION"}:
+            values.setdefault(name, value)
+
+    required = ("UID", "SUMMARY", "DTSTART", "DTEND")
+    if any(not values.get(field, "").strip() for field in required):
+        raise CalDAVError("VEVENT is missing required event properties.")
+    return CalendarEvent(
+        uid=_unescape_ical(values["UID"]),
+        title=_unescape_ical(values["SUMMARY"]),
+        starts_at=_parse_utc(values["DTSTART"]),
+        ends_at=_parse_utc(values["DTEND"]),
+        description=_unescape_ical(values.get("DESCRIPTION", "")),
+        location=_unescape_ical(values.get("LOCATION", "")),
+        calendar_href=calendar_href,
+        etag=etag,
+    )
 
 
 class CalDAVClient:
@@ -105,7 +164,7 @@ class CalDAVClient:
             raise CalDAVError("Refusing cross-origin DAV request.")
         request_headers = {
             "Authorization": self._authorization(),
-            "User-Agent": "GoreeCloud-Calendar/0.1",
+            "User-Agent": "GoreeCloud-Calendar/0.2",
         }
         if headers:
             request_headers.update(headers)
@@ -145,6 +204,45 @@ class CalDAVClient:
             if resource_type.find("c:calendar", namespaces) is not None:
                 found.append(href)
         return tuple(dict.fromkeys(found))
+
+    def query_events(
+        self, *, calendar_href: str, starts_at: datetime, ends_at: datetime
+    ) -> tuple[CalendarEvent, ...]:
+        """Read VEVENT resources intersecting a UTC-normalized time range."""
+
+        if starts_at.tzinfo is None or ends_at.tzinfo is None or ends_at <= starts_at:
+            raise CalDAVError("Calendar query requires a valid timezone-aware range.")
+        body = f'''<?xml version="1.0" encoding="utf-8"?>
+<c:calendar-query xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
+  <d:prop><d:getetag/><c:calendar-data/></d:prop>
+  <c:filter><c:comp-filter name="VCALENDAR"><c:comp-filter name="VEVENT">
+    <c:time-range start="{_format_utc(starts_at)}" end="{_format_utc(ends_at)}"/>
+  </c:comp-filter></c:comp-filter></c:filter>
+</c:calendar-query>'''.encode("utf-8")
+        with self._request(
+            method="REPORT",
+            href=calendar_href,
+            body=body,
+            headers={"Depth": "1", "Content-Type": "application/xml; charset=utf-8"},
+        ) as response:
+            payload = response.read()
+        try:
+            root = ElementTree.fromstring(payload)
+        except ElementTree.ParseError as exc:
+            raise CalDAVError("CalDAV calendar query returned invalid XML.") from exc
+
+        namespaces = {"d": "DAV:", "c": "urn:ietf:params:xml:ns:caldav"}
+        parsed: list[CalendarEvent] = []
+        for response in root.findall("d:response", namespaces):
+            href = response.findtext("d:href", default="", namespaces=namespaces).strip()
+            etag = response.findtext(".//d:getetag", default="", namespaces=namespaces).strip()
+            calendar_data = response.findtext(
+                ".//c:calendar-data", default="", namespaces=namespaces
+            )
+            if not href or not calendar_data.strip():
+                continue
+            parsed.append(parse_event(calendar_data, calendar_href=calendar_href, etag=etag or None))
+        return tuple(sorted(parsed, key=lambda event: (event.starts_at, event.ends_at, event.uid)))
 
     def put_event(self, *, calendar_href: str, event: CalendarEvent) -> CalendarEvent:
         """Create or update one VEVENT and return its latest ETag when provided."""
