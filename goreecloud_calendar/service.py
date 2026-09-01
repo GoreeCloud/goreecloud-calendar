@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Protocol
 
-from goreecloud_calendar.api import busy_payload, view_payload
+from goreecloud_calendar.api import busy_payload, free_payload, view_payload
 from goreecloud_calendar.auth import CalendarPrincipal
 from goreecloud_calendar.events import CalendarEvent
 from goreecloud_calendar.views import build_view_window
@@ -64,6 +64,28 @@ class CalendarService:
             calendar_href=calendar_href, starts_at=starts_at, ends_at=ends_at
         )
         return busy_payload(events=events, starts_at=starts_at, ends_at=ends_at)
+
+    def free_time(
+        self,
+        *,
+        principal: CalendarPrincipal,
+        calendar_href: str,
+        starts_at: datetime,
+        ends_at: datetime,
+        minimum_minutes: int = 30,
+    ) -> dict[str, object]:
+        """Return privacy-safe free intervals within one authorized calendar."""
+
+        principal.require_calendar(calendar_href)
+        events = self.store.query_events(
+            calendar_href=calendar_href, starts_at=starts_at, ends_at=ends_at
+        )
+        return free_payload(
+            events=events,
+            starts_at=starts_at,
+            ends_at=ends_at,
+            minimum_minutes=minimum_minutes,
+        )
 
     def save_event(
         self,
