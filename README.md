@@ -43,3 +43,7 @@ Run the dependency-free test suite with:
 ```bash
 python -m unittest discover -s tests -v
 ```
+
+## License
+
+GoreeCloud Calendar is licensed under the GNU Affero General Public License, version 3 only (`AGPL-3.0-only`). See `LICENSE`.
