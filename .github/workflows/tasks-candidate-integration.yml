@@ -1,0 +1,92 @@
+name: Tasks Candidate Integration
+
+on:
+  push:
+    branches:
+      - main
+      - 'agent/**'
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: calendar-tasks-candidate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  live-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      TASKS_CANDIDATE_SHA: 58c2b79307839f6b25ffd23c838267d2be529b39
+      TASKS_LIVE_BASE_URL: http://127.0.0.1:8765
+      TASKS_CALENDAR_API_ENABLED: 'true'
+      TASKS_CALENDAR_API_USERNAME: calendar-contract
+      TASKS_CALENDAR_API_TOKEN: calendar-live-contract-token-0123456789abcdef0123456789abcdef
+      TASKS_CALENDAR_API_TOKEN_FILE: ''
+      TASKS_CALENDAR_API_MAX_TASKS: '500'
+      DJANGO_SECRET_KEY: calendar-tasks-live-contract-test-only-secret
+      DJANGO_DEBUG: 'false'
+      DJANGO_ALLOWED_HOSTS: 127.0.0.1,localhost
+      DATABASE_ENGINE: sqlite
+
+    steps:
+      - name: Check out exact Calendar candidate
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Check out exact Tasks API candidate
+        uses: actions/checkout@v4
+        with:
+          repository: GoreeCloud/goreecloud-tasks
+          ref: ${{ env.TASKS_CANDIDATE_SHA }}
+          path: tasks-source
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13.14'
+          cache: pip
+          cache-dependency-path: tasks-source/requirements.txt
+
+      - name: Install Tasks runtime dependencies
+        run: |
+          python -m pip install --requirement tasks-source/requirements.txt
+          python -m pip check
+
+      - name: Prepare disposable Tasks database
+        working-directory: tasks-source
+        run: |
+          python manage.py migrate --noinput
+          python manage.py shell -c "from datetime import timedelta; from django.contrib.auth import get_user_model; from django.utils import timezone; from tasks.models import Task; User=get_user_model(); user=User.objects.create_user(username='calendar-contract', password='not-used-by-service-contract'); Task.objects.create(title='Calendar contract seed', creator=user, assignee=user, due_at=timezone.now()+timedelta(days=3), status=Task.Status.READY)"
+
+      - name: Start disposable Tasks candidate
+        run: |
+          (cd tasks-source && python manage.py runserver 127.0.0.1:8765 --noreload > ../tasks-live.log 2>&1) &
+          echo $! > tasks-live.pid
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8765/health/ > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat tasks-live.log
+          exit 1
+
+      - name: Validate live projection, create, read, reschedule, and conflict flow
+        run: python tests/validate_tasks_candidate_live.py
+
+      - name: Show disposable Tasks log on failure
+        if: failure()
+        run: cat tasks-live.log
+
+      - name: Stop disposable Tasks candidate
+        if: always()
+        run: |
+          if [ -f tasks-live.pid ]; then
+            kill "$(cat tasks-live.pid)" 2>/dev/null || true
+          fi
