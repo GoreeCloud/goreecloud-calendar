@@ -78,7 +78,7 @@ jobs:
           exit 1
 
       - name: Validate live projection, create, read, reschedule, and conflict flow
-        run: python tests/validate_tasks_candidate_live.py
+        run: PYTHONPATH=. python tests/validate_tasks_candidate_live.py
 
       - name: Show disposable Tasks log on failure
         if: failure()
