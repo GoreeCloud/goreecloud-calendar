@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import Protocol
+from typing import Iterable, Protocol
 
 from goreecloud_calendar.api import busy_payload, view_payload
 from goreecloud_calendar.auth import CalendarPrincipal
@@ -51,6 +51,46 @@ class CalendarService:
             timezone_name=timezone_name,
         )
 
+    def busy_time_for_calendars(
+        self,
+        *,
+        principal: CalendarPrincipal,
+        calendar_hrefs: Iterable[str],
+        starts_at: datetime,
+        ends_at: datetime,
+    ) -> dict[str, object]:
+        """Return one minimized busy projection across authorized collections.
+
+        Every collection is authorized independently before it is queried. The returned
+        projection is produced only after events from all authorized collections have been
+        combined, so overlapping busy periods are merged without exposing which calendar or
+        event produced an interval.
+        """
+
+        hrefs = tuple(calendar_hrefs)
+        if not hrefs:
+            raise ValueError("at least one calendar collection is required")
+        if len(set(hrefs)) != len(hrefs):
+            raise ValueError("calendar collections must be unique")
+
+        for calendar_href in hrefs:
+            principal.require_calendar(calendar_href)
+
+        events: list[CalendarEvent] = []
+        for calendar_href in hrefs:
+            events.extend(
+                self.store.query_events(
+                    calendar_href=calendar_href,
+                    starts_at=starts_at,
+                    ends_at=ends_at,
+                )
+            )
+        return busy_payload(
+            events=tuple(events),
+            starts_at=starts_at,
+            ends_at=ends_at,
+        )
+
     def busy_time(
         self,
         *,
@@ -59,11 +99,12 @@ class CalendarService:
         starts_at: datetime,
         ends_at: datetime,
     ) -> dict[str, object]:
-        principal.require_calendar(calendar_href)
-        events = self.store.query_events(
-            calendar_href=calendar_href, starts_at=starts_at, ends_at=ends_at
+        return self.busy_time_for_calendars(
+            principal=principal,
+            calendar_hrefs=(calendar_href,),
+            starts_at=starts_at,
+            ends_at=ends_at,
         )
-        return busy_payload(events=events, starts_at=starts_at, ends_at=ends_at)
 
     def save_event(
         self,
