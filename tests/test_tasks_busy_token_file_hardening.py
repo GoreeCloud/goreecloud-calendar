@@ -6,6 +6,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from goreecloud_calendar.integrations.tasks_busy_api import (
     MAX_TOKEN_FILE_BYTES,
@@ -50,6 +51,30 @@ class TasksBusyTokenFileHardeningTests(unittest.TestCase):
 
         self.assertIsNotNone(config.error)
         self.assertIn("symbolic link", config.error)
+        self.assertEqual(config.token, "")
+
+    def test_replaced_token_file_between_lstat_and_open_fails_closed(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            token_path = Path(temporary_directory) / "token"
+            token_path.write_text(TOKEN, encoding="utf-8")
+            os.chmod(token_path, 0o600)
+            replacement_path = Path(temporary_directory) / "replacement"
+            replacement_path.write_text("r" * len(TOKEN), encoding="utf-8")
+            os.chmod(replacement_path, 0o600)
+            real_open = os.open
+
+            def replace_then_open(path, flags):
+                os.replace(replacement_path, token_path)
+                return real_open(path, flags)
+
+            with mock.patch(
+                "goreecloud_calendar.integrations.tasks_busy_api.os.open",
+                side_effect=replace_then_open,
+            ):
+                config = load_tasks_busy_api_configuration(self.base_environment(token_path))
+
+        self.assertIsNotNone(config.error)
+        self.assertIn("changed while being opened", config.error)
         self.assertEqual(config.token, "")
 
     def test_oversized_token_file_fails_closed_before_token_use(self):
