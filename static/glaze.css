@@ -1,3 +1,4 @@
+/* GoreeCloud Calendar — Glaze UI 1.4 form-factor foundation */
 :root {
   color-scheme: light dark;
   --gc-canvas: #f4f6fb;
@@ -13,6 +14,8 @@
   --gc-radius-panel: 24px;
   --gc-shadow-raised: 0 12px 36px rgba(26, 34, 54, 0.12);
   --gc-gutter: clamp(16px, 4vw, 36px);
+  --gc-touch-target: 44px;
+  --gc-content-max: 1440px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -31,6 +34,7 @@
 }
 
 * { box-sizing: border-box; }
+html { scroll-padding-block: 24px; }
 body {
   margin: 0;
   min-height: 100vh;
@@ -40,7 +44,7 @@ body {
 }
 button, input, textarea { font: inherit; }
 button, input, textarea {
-  min-height: 44px;
+  min-height: var(--gc-touch-target);
   border: 1px solid var(--gc-border);
   border-radius: var(--gc-radius-control);
   background: var(--gc-raised);
@@ -67,7 +71,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, [tabindex="-1
 }
 .skip-link:focus { transform: translateY(0); }
 
-.calendar-app { width: min(1440px, 100%); margin: 0 auto; padding: var(--gc-gutter); }
+.calendar-app {
+  width: min(var(--gc-content-max), 100%);
+  margin: 0 auto;
+  padding: var(--gc-gutter);
+}
 .glaze-surface {
   background: var(--gc-surface);
   border: 1px solid var(--gc-border);
@@ -82,7 +90,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, [tabindex="-1
 .app-bar { justify-content: space-between; padding: 18px 20px; }
 .app-bar h1, .calendar-toolbar h2, dialog h2 { margin: 0; }
 .eyebrow { margin: 0 0 4px; color: var(--gc-muted); font-size: .82rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
-.view-switcher { margin: 16px 0; padding: 8px; width: fit-content; max-width: 100%; overflow-x: auto; }
+.view-switcher { margin: 16px 0; padding: 8px; width: fit-content; max-width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; }
 .view-switcher button[aria-pressed="true"] { background: var(--gc-accent); color: #fff; border-color: transparent; }
 .calendar-toolbar { justify-content: center; padding: 8px 0 18px; }
 .calendar-toolbar > div { min-width: min(420px, 60vw); text-align: center; }
@@ -90,16 +98,19 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, [tabindex="-1
 .calendar-stage { min-height: 420px; padding: clamp(14px, 2vw, 24px); }
 .event-list { display: grid; gap: 12px; }
 .view-month { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
-.event-card { border: 1px solid var(--gc-border); border-radius: 18px; background: var(--gc-raised); padding: 14px; }
+.event-card { border: 1px solid var(--gc-border); border-radius: 18px; background: var(--gc-raised); padding: 14px; scroll-margin-block: 24px; }
+.event-card:focus-within { outline: 2px solid var(--gc-focus); outline-offset: 2px; }
 .event-card h3 { margin: 0 0 6px; font-size: 1rem; }
 .event-card p { margin: 4px 0 0; color: var(--gc-muted); }
 .event-time { font-size: .9rem; }
 .empty-state { color: var(--gc-muted); text-align: center; padding: 80px 16px; }
-.status-banner { margin: 0 0 12px; padding: 12px 14px; border: 1px solid var(--gc-border); border-radius: 14px; background: var(--gc-raised); }
+.status-banner { margin: 0 0 12px; padding: 12px 14px; border: 1px solid var(--gc-border); border-radius: 14px; background: var(--gc-raised); overflow-wrap: anywhere; }
 .status-banner[data-kind="error"] { color: var(--gc-danger); }
 
 dialog {
   width: min(640px, calc(100% - 24px));
+  max-height: calc(100dvh - 24px);
+  overflow: auto;
   border: 1px solid var(--gc-border);
   border-radius: var(--gc-radius-panel);
   background: var(--gc-raised);
@@ -117,17 +128,63 @@ dialog footer { justify-content: flex-end; }
 @supports (backdrop-filter: blur(18px)) {
   .glaze-surface { backdrop-filter: blur(18px) saturate(1.08); }
 }
-@media (max-width: 700px) {
-  .app-bar { align-items: flex-start; }
-  .app-actions { flex-direction: column-reverse; align-items: stretch; }
-  .form-row { flex-direction: column; align-items: stretch; }
+
+/* Mobile / Compact: <= 719px */
+@media (max-width: 719px) {
+  :root { --gc-touch-target: 48px; --gc-gutter: 12px; }
+  .calendar-app { padding-bottom: calc(18px + env(safe-area-inset-bottom)); }
+  .app-bar { align-items: stretch; flex-direction: column; gap: 16px; padding: 16px; }
+  .app-actions { display: grid; grid-template-columns: 1fr 1fr; }
+  .app-actions button { width: 100%; }
+  .view-switcher { width: 100%; margin: 12px 0; }
+  .view-switcher button { flex: 1 0 auto; }
+  .calendar-toolbar { gap: 8px; padding: 6px 0 12px; }
   .calendar-toolbar > div { min-width: 0; flex: 1; }
+  .calendar-stage { min-height: 52vh; padding: 12px; }
+  .view-month, .event-list { grid-template-columns: 1fr; }
+  .event-card { padding: 16px; }
+  .empty-state { padding: 48px 12px; }
+  .form-row { flex-direction: column; align-items: stretch; }
+  dialog { width: calc(100% - 16px); max-height: calc(100dvh - 16px); padding: 16px; }
+  dialog footer { display: grid; grid-template-columns: 1fr; }
+  dialog footer button { width: 100%; }
 }
+
+/* Tablet / Medium: 720–1023px */
+@media (min-width: 720px) and (max-width: 1023px) {
+  :root { --gc-touch-target: 48px; --gc-gutter: 20px; }
+  .calendar-app { width: min(960px, 100%); }
+  .app-bar { padding: 18px; }
+  .view-switcher { width: 100%; }
+  .view-switcher button { flex: 1 0 auto; }
+  .view-month { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .calendar-stage { min-height: 56vh; }
+  dialog { width: min(720px, calc(100% - 32px)); }
+}
+
+/* Desktop / Expanded: 1024–1439px */
+@media (min-width: 1024px) and (max-width: 1439px) {
+  :root { --gc-gutter: 28px; }
+  .calendar-app { width: min(1280px, 100%); }
+  .view-month { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+/* Wide Desktop: >= 1440px */
+@media (min-width: 1440px) {
+  :root { --gc-gutter: 36px; --gc-content-max: 1520px; }
+  .view-month { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .calendar-stage { padding: 28px; }
+}
+
 @media (prefers-reduced-transparency: reduce) {
   .glaze-surface { background: var(--gc-raised); backdrop-filter: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; }
+}
+@media (prefers-contrast: more) {
+  :root { --gc-border: currentColor; }
+  .glaze-surface, .event-card, .status-banner { box-shadow: none; }
 }
 @media (forced-colors: active) {
   .glaze-surface, button, input, textarea, .event-card, .status-banner { border: 1px solid CanvasText; box-shadow: none; }

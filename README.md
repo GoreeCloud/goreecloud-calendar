@@ -16,11 +16,11 @@ The repository now includes:
 - deterministic month, week, day, and agenda view-window projections;
 - versioned first-party event-view and privacy-minimized busy-time API contracts;
 - a fail-closed CalDAV transport foundation with HTTPS-only configuration, cross-origin refusal, authenticated discovery, bounded calendar-query reads, ETag-protected writes/deletes, and iCalendar serialization;
-- a Glaze UI 1.3 application shell with responsive view switching, date navigation, event rendering, event-creation workflow, keyboard focus treatment, reduced-motion/transparency handling, and forced-colors support;
+- a Glaze UI 1.4 application shell with purpose-built Mobile, Tablet, Desktop, and Wide Desktop compositions, touch-aware controls, safe-area handling, bounded content widths, keyboard focus orientation, reduced-motion/transparency handling, increased-contrast support, and forced-colors resilience;
 - the strict GoreeCloud Tasks projection consumer and bidirectional Tasks integration contract;
 - dependency-free unit/contract tests suitable for CI.
 
-This is a source foundation, not production acceptance. Production publication, production DAV credentials, user migration, monitoring, backup/recovery evidence, and live target-environment validation remain separate controlled work.
+This is a source foundation, not production acceptance. Production publication, production DAV credentials, user migration, monitoring, backup/recovery evidence, Wardveil Security acceptance, Privacy Shield acceptance, Everkeep acceptance, and live target-environment validation remain separate controlled work.
 
 ## CalDAV compatibility boundary
 
