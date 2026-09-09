@@ -68,6 +68,8 @@ def _load_protected_secret(path_value: str) -> str:
 
     try:
         info = os.fstat(descriptor)
+        if (info.st_dev, info.st_ino) != (link_info.st_dev, link_info.st_ino):
+            raise ValueError("configured token file changed while being opened")
         if not stat.S_ISREG(info.st_mode):
             raise ValueError("configured token path is not a regular file")
         if info.st_mode & (stat.S_IRWXG | stat.S_IRWXO):
