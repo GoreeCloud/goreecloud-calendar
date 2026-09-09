@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from .events import CalendarEvent, busy_intervals
@@ -11,6 +10,8 @@ from .views import ViewMode, build_view_window, events_for_window
 
 EVENT_SCHEMA = "goreecloud.calendar.events.v1"
 BUSY_SCHEMA = "goreecloud.calendar.busy.v1"
+FREE_SCHEMA = "goreecloud.calendar.free.v1"
+MAX_FREE_MINIMUM_MINUTES = 24 * 60
 
 
 def _iso(value: datetime) -> str:
@@ -54,11 +55,9 @@ def view_payload(
     }
 
 
-def busy_payload(
+def _busy_for_window(
     *, events: tuple[CalendarEvent, ...], starts_at: datetime, ends_at: datetime
-) -> dict[str, Any]:
-    """Build a least-privilege busy-time projection for peer applications such as Tasks."""
-
+) -> tuple[tuple[datetime, datetime], ...]:
     if starts_at.tzinfo is None or ends_at.tzinfo is None:
         raise ValueError("busy window boundaries must be timezone-aware")
     if ends_at <= starts_at:
@@ -79,11 +78,62 @@ def busy_payload(
         )
         for event in visible
     )
-    intervals = busy_intervals(clipped)
+    return busy_intervals(clipped)
+
+
+def busy_payload(
+    *, events: tuple[CalendarEvent, ...], starts_at: datetime, ends_at: datetime
+) -> dict[str, Any]:
+    """Build a least-privilege busy-time projection for peer applications such as Tasks."""
+
+    intervals = _busy_for_window(events=events, starts_at=starts_at, ends_at=ends_at)
     return {
         "schema": BUSY_SCHEMA,
         "version": 1,
         "range": {"starts_at": _iso(starts_at), "ends_at": _iso(ends_at)},
         "returned": len(intervals),
         "busy": [{"starts_at": _iso(start), "ends_at": _iso(end)} for start, end in intervals],
+    }
+
+
+def free_payload(
+    *,
+    events: tuple[CalendarEvent, ...],
+    starts_at: datetime,
+    ends_at: datetime,
+    minimum_minutes: int = 30,
+) -> dict[str, Any]:
+    """Build privacy-safe free intervals without returning event content.
+
+    Free time is derived only from the same merged busy intervals already used by
+    the peer-facing busy contract. The payload contains no event identity, title,
+    description, location, attendee, calendar name, or backend metadata.
+    """
+
+    if isinstance(minimum_minutes, bool) or not isinstance(minimum_minutes, int):
+        raise ValueError("minimum_minutes must be an integer")
+    if minimum_minutes < 1 or minimum_minutes > MAX_FREE_MINIMUM_MINUTES:
+        raise ValueError("minimum_minutes must be between 1 and 1440")
+
+    intervals = _busy_for_window(events=events, starts_at=starts_at, ends_at=ends_at)
+    minimum = timedelta(minutes=minimum_minutes)
+    free: list[tuple[datetime, datetime]] = []
+    cursor = starts_at
+
+    for busy_start, busy_end in intervals:
+        if busy_start > cursor and busy_start - cursor >= minimum:
+            free.append((cursor, busy_start))
+        if busy_end > cursor:
+            cursor = busy_end
+
+    if ends_at > cursor and ends_at - cursor >= minimum:
+        free.append((cursor, ends_at))
+
+    return {
+        "schema": FREE_SCHEMA,
+        "version": 1,
+        "range": {"starts_at": _iso(starts_at), "ends_at": _iso(ends_at)},
+        "minimum_minutes": minimum_minutes,
+        "returned": len(free),
+        "free": [{"starts_at": _iso(start), "ends_at": _iso(end)} for start, end in free],
     }

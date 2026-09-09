@@ -51,6 +51,17 @@ def _parse_date(value: Any, field: str) -> date:
     return date.fromisoformat(value)
 
 
+def _parse_int(value: Any, field: str, *, default: int | None = None) -> int:
+    if value is None and default is not None:
+        return default
+    if not isinstance(value, str):
+        raise ValueError(f"{field} is required")
+    try:
+        return int(value)
+    except ValueError as exc:
+        raise ValueError(f"{field} must be an integer") from exc
+
+
 def dispatch(
     *,
     service: CalendarService,
@@ -89,6 +100,20 @@ def dispatch(
                 calendar_href=calendar_href,
                 starts_at=starts_at,
                 ends_at=ends_at,
+            ))
+
+        if method == "GET" and path == "/api/v1/free-time":
+            starts_at = _parse_dt(query.get("starts_at"), "starts_at")
+            ends_at = _parse_dt(query.get("ends_at"), "ends_at")
+            minimum_minutes = _parse_int(
+                query.get("minimum_minutes"), "minimum_minutes", default=30
+            )
+            return _json(200, service.free_time(
+                principal=principal,
+                calendar_href=calendar_href,
+                starts_at=starts_at,
+                ends_at=ends_at,
+                minimum_minutes=minimum_minutes,
             ))
 
         if method == "PUT" and path == "/api/v1/events":
