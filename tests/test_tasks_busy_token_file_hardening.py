@@ -39,6 +39,30 @@ class TasksBusyTokenFileHardeningTests(unittest.TestCase):
         self.assertIsNone(config.error)
         self.assertEqual(config.token, TOKEN)
 
+    def test_partial_descriptor_reads_are_completed_before_token_use(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            token_path = Path(temporary_directory) / "token"
+            token_path.write_text(TOKEN + "\n", encoding="utf-8")
+            os.chmod(token_path, 0o600)
+            real_read = os.read
+            first_read = True
+
+            def short_first_read(descriptor: int, count: int) -> bytes:
+                nonlocal first_read
+                if first_read:
+                    first_read = False
+                    return real_read(descriptor, min(count, 8))
+                return real_read(descriptor, count)
+
+            with mock.patch(
+                "goreecloud_calendar.integrations.tasks_busy_api.os.read",
+                side_effect=short_first_read,
+            ):
+                config = load_tasks_busy_api_configuration(self.base_environment(token_path))
+
+        self.assertIsNone(config.error)
+        self.assertEqual(config.token, TOKEN)
+
     def test_symbolic_link_token_file_fails_closed(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             target_path = Path(temporary_directory) / "target"
