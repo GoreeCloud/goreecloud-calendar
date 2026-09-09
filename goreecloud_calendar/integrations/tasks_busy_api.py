@@ -49,6 +49,28 @@ def _env_bool(value: str | None) -> bool:
     return bool(value and value.strip().lower() in {"1", "true", "yes", "on"})
 
 
+def _read_bounded_descriptor(descriptor: int) -> bytes:
+    """Read one regular-file descriptor to EOF without exceeding the secret-file ceiling."""
+
+    chunks: list[bytes] = []
+    total = 0
+    while total <= MAX_TOKEN_FILE_BYTES:
+        try:
+            chunk = os.read(
+                descriptor,
+                min(1024, MAX_TOKEN_FILE_BYTES + 1 - total),
+            )
+        except OSError as exc:
+            raise ValueError("configured token file is unreadable") from exc
+        if not chunk:
+            break
+        chunks.append(chunk)
+        total += len(chunk)
+        if total > MAX_TOKEN_FILE_BYTES:
+            raise ValueError("configured token file is too large")
+    return b"".join(chunks)
+
+
 def _load_protected_secret(path_value: str) -> str:
     """Read one bounded regular secret file without following its final symlink."""
 
@@ -77,12 +99,7 @@ def _load_protected_secret(path_value: str) -> str:
         if info.st_size > MAX_TOKEN_FILE_BYTES:
             raise ValueError("configured token file is too large")
 
-        try:
-            raw = os.read(descriptor, MAX_TOKEN_FILE_BYTES + 1)
-        except OSError as exc:
-            raise ValueError("configured token file is unreadable") from exc
-        if len(raw) > MAX_TOKEN_FILE_BYTES:
-            raise ValueError("configured token file is too large")
+        raw = _read_bounded_descriptor(descriptor)
         try:
             return raw.decode("utf-8").strip()
         except UnicodeDecodeError as exc:
