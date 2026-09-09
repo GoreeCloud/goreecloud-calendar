@@ -29,6 +29,7 @@ SCHEMA = "goreecloud.calendar.tasks-busy.v1"
 VERSION = 1
 DEFAULT_MAX_WINDOW_MINUTES = 31 * 24 * 60
 ABSOLUTE_MAX_WINDOW_MINUTES = 62 * 24 * 60
+MAX_TOKEN_FILE_BYTES = 4096
 _ALLOWED_QUERY_FIELDS = frozenset({"starts_at", "ends_at"})
 
 
@@ -48,20 +49,63 @@ def _env_bool(value: str | None) -> bool:
     return bool(value and value.strip().lower() in {"1", "true", "yes", "on"})
 
 
+def _read_bounded_descriptor(descriptor: int) -> bytes:
+    """Read one regular-file descriptor to EOF without exceeding the secret-file ceiling."""
+
+    chunks: list[bytes] = []
+    total = 0
+    while total <= MAX_TOKEN_FILE_BYTES:
+        try:
+            chunk = os.read(
+                descriptor,
+                min(1024, MAX_TOKEN_FILE_BYTES + 1 - total),
+            )
+        except OSError as exc:
+            raise ValueError("configured token file is unreadable") from exc
+        if not chunk:
+            break
+        chunks.append(chunk)
+        total += len(chunk)
+        if total > MAX_TOKEN_FILE_BYTES:
+            raise ValueError("configured token file is too large")
+    return b"".join(chunks)
+
+
 def _load_protected_secret(path_value: str) -> str:
+    """Read one bounded regular secret file without following its final symlink."""
+
     path = Path(path_value)
     try:
-        info = path.stat()
+        link_info = path.lstat()
     except OSError as exc:
         raise ValueError("configured token file is unavailable") from exc
-    if not stat.S_ISREG(info.st_mode):
-        raise ValueError("configured token path is not a regular file")
-    if info.st_mode & (stat.S_IRWXG | stat.S_IRWXO):
-        raise ValueError("configured token file permissions are too broad")
+    if stat.S_ISLNK(link_info.st_mode):
+        raise ValueError("configured token file may not be a symbolic link")
+
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
     try:
-        return path.read_text(encoding="utf-8").strip()
+        descriptor = os.open(path, flags)
     except OSError as exc:
-        raise ValueError("configured token file is unreadable") from exc
+        raise ValueError("configured token file is unavailable") from exc
+
+    try:
+        info = os.fstat(descriptor)
+        if (info.st_dev, info.st_ino) != (link_info.st_dev, link_info.st_ino):
+            raise ValueError("configured token file changed while being opened")
+        if not stat.S_ISREG(info.st_mode):
+            raise ValueError("configured token path is not a regular file")
+        if info.st_mode & (stat.S_IRWXG | stat.S_IRWXO):
+            raise ValueError("configured token file permissions are too broad")
+        if info.st_size > MAX_TOKEN_FILE_BYTES:
+            raise ValueError("configured token file is too large")
+
+        raw = _read_bounded_descriptor(descriptor)
+        try:
+            return raw.decode("utf-8").strip()
+        except UnicodeDecodeError as exc:
+            raise ValueError("configured token file is not valid UTF-8") from exc
+    finally:
+        os.close(descriptor)
 
 
 def load_tasks_busy_api_configuration(
