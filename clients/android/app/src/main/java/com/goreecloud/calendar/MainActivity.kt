@@ -31,7 +31,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            MaterialTheme {
+            GlazeCalendarTheme {
                 CalendarDevelopmentShell(CalendarCapabilitySnapshot.developmentShell())
             }
         }
@@ -66,6 +66,11 @@ private fun CalendarDevelopmentShell(capabilities: CalendarCapabilitySnapshot) {
             Text(
                 text = "Native Android Development client",
                 style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = "GLAZE UI ${GlazeCalendarContract.VERSION} · ${GlazeCalendarContract.ADOPTION_STATE.replace('_', ' ')}",
+                style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
