@@ -14,6 +14,7 @@ enum class CalendarReadContractState {
 data class CalendarReadContractSnapshot(
     val eventListing: CalendarReadContractState,
     val busyTime: CalendarReadContractState,
+    val nativeIdentityBindingContract: CalendarReadContractState,
     val nativeIdentitySession: CalendarReadContractState,
     val networkTransport: CalendarReadContractState,
 )
@@ -80,6 +81,7 @@ object CalendarReadContract {
     fun readiness(): CalendarReadContractSnapshot = CalendarReadContractSnapshot(
         eventListing = CalendarReadContractState.SOURCE_READY,
         busyTime = CalendarReadContractState.SOURCE_READY,
+        nativeIdentityBindingContract = CalendarReadContractState.SOURCE_READY,
         nativeIdentitySession = CalendarReadContractState.IDENTITY_BLOCKED,
         networkTransport = CalendarReadContractState.TRANSPORT_BLOCKED,
     )
