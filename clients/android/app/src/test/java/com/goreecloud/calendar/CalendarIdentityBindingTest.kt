@@ -16,6 +16,18 @@ class CalendarIdentityBindingTest {
         expiresAt: Instant = now.plusSeconds(600),
     ) = CalendarIdentityProof(principalId, audience, issuedAt, expiresAt)
 
+    @Test
+    fun canonicalIdentityContractCandidateIsPinnedExactly() {
+        assertEquals(
+            "goreecloud.identity.native-application-session/v1",
+            CalendarIdentityContractReference.SCHEMA,
+        )
+        assertEquals(
+            "62ad109809f2e479cf71a6327ffd0d4537a6b3df",
+            CalendarIdentityContractReference.CANDIDATE_REVISION,
+        )
+    }
+
     @Test fun missingProofFailsClosed() {
         assertEquals(CalendarIdentityBindingDecision.MissingProof, CalendarIdentityBindingPolicy.evaluate(null, expectation, now))
     }
