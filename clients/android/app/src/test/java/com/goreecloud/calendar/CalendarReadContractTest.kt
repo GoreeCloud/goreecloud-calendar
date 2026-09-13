@@ -73,10 +73,11 @@ class CalendarReadContractTest {
     }
 
     @Test
-    fun readContractDoesNotClaimNativeIdentityOrTransportAcceptance() {
+    fun identityContractCanBeSourceReadyWithoutClaimingLiveSessionOrTransport() {
         val readiness = CalendarReadContract.readiness()
         assertEquals(CalendarReadContractState.SOURCE_READY, readiness.eventListing)
         assertEquals(CalendarReadContractState.SOURCE_READY, readiness.busyTime)
+        assertEquals(CalendarReadContractState.SOURCE_READY, readiness.nativeIdentityBindingContract)
         assertEquals(CalendarReadContractState.IDENTITY_BLOCKED, readiness.nativeIdentitySession)
         assertEquals(CalendarReadContractState.TRANSPORT_BLOCKED, readiness.networkTransport)
     }
