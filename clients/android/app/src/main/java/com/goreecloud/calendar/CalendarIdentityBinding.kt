@@ -2,6 +2,11 @@ package com.goreecloud.calendar
 
 import java.time.Instant
 
+object CalendarIdentityContractReference {
+    const val SCHEMA = "goreecloud.identity.native-application-session/v1"
+    const val CANDIDATE_REVISION = "62ad109809f2e479cf71a6327ffd0d4537a6b3df"
+}
+
 /**
  * Non-secret identity proof metadata required before a future native Calendar session may activate.
  * No token, cookie, password, CalDAV credential, refresh secret, or transport is modeled here.
@@ -37,7 +42,11 @@ sealed interface CalendarIdentityBindingDecision {
     data object Expired : CalendarIdentityBindingDecision
 }
 
-/** Pure, fail-closed metadata policy. A Bound result does not authenticate or enable transport. */
+/**
+ * Pure, fail-closed metadata policy aligned to the pinned GoreeCloud Identity native-session
+ * source contract candidate. A Bound result does not authenticate, enable transport, or authorize
+ * event access.
+ */
 object CalendarIdentityBindingPolicy {
     fun evaluate(
         proof: CalendarIdentityProof?,
