@@ -92,14 +92,6 @@ platform_systems:
       - clients/android/app/src/test/java/com/goreecloud/calendar/CalendarIdentityBindingTest.kt
     notes: The Android client has a source-ready fail-closed principal/audience/lifetime acceptance contract pinned to the canonical GoreeCloud Identity native-session source contract, but no deployed native Identity registration, credential exchange, session runtime, protected credential storage, or accepted production Identity authority exists.
 
-  sync:
-    result: applicable-blocked
-    version: null
-    evidence:
-      - README.md
-      - clients/android/README.md
-    notes: Radicale/CalDAV remains the authoritative event store and future native offline/cache reconciliation is planned, but no accepted GoreeCloud Sync change tracking, version coordination, conflict handling, authorized replication, offline-resume, or cross-device runtime integration is established. Sync remains separate from Everkeep backup/recovery and from the optional Android Calendar Provider bridge.
-
 health:
   health_endpoint: null
   readiness_endpoint: null
