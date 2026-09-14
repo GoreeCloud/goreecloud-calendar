@@ -91,8 +91,7 @@ object CalendarResponseContract {
             return reject("duplicate event uid")
         }
         envelope.events.forEachIndexed { index, event ->
-            val eventRange = validateEvent(event) ?: return@forEachIndexed
-            if (eventRange == INVALID_RANGE) return reject("event[$index]: invalid event")
+            val eventRange = validateEvent(event) ?: return reject("event[$index]: invalid event")
             if (!(eventRange.first < range.second && range.first < eventRange.second)) {
                 return reject("event[$index]: event is outside response range")
             }
@@ -124,25 +123,25 @@ object CalendarResponseContract {
             if (parsed.first < expectedStartsAt || parsed.second > expectedEndsAt) {
                 return reject("busy[$index]: interval exceeds requested range")
             }
-            if (previousEnd != null && !parsed.first.isAfter(previousEnd)) {
-                return reject("busy[$index]: intervals are overlapping or not strictly ordered")
+            previousEnd?.let { priorEnd ->
+                if (!parsed.first.isAfter(priorEnd)) {
+                    return reject("busy[$index]: intervals are overlapping or not strictly ordered")
+                }
             }
             previousEnd = parsed.second
         }
         return CalendarResponseDecision.Accepted(envelope.busy.size)
     }
 
-    private val INVALID_RANGE = OffsetDateTime.MIN to OffsetDateTime.MIN
-
     private fun validateEvent(event: CalendarEventWire): Pair<OffsetDateTime, OffsetDateTime>? {
-        if (!validCanonicalText(event.uid, MAX_IDENTITY_TEXT, allowEmpty = false)) return INVALID_RANGE
-        if (!validCanonicalText(event.title, MAX_TEXT, allowEmpty = false)) return INVALID_RANGE
-        if (!validContentText(event.description, MAX_TEXT)) return INVALID_RANGE
-        if (!validContentText(event.location, MAX_TEXT)) return INVALID_RANGE
+        if (!validCanonicalText(event.uid, MAX_IDENTITY_TEXT, allowEmpty = false)) return null
+        if (!validCanonicalText(event.title, MAX_TEXT, allowEmpty = false)) return null
+        if (!validContentText(event.description, MAX_TEXT)) return null
+        if (!validContentText(event.location, MAX_TEXT)) return null
         if (event.etag != null && !validCanonicalText(event.etag, MAX_IDENTITY_TEXT, allowEmpty = false)) {
-            return INVALID_RANGE
+            return null
         }
-        return parsePositiveRange(CalendarRangeWire(event.startsAt, event.endsAt)) ?: INVALID_RANGE
+        return parsePositiveRange(CalendarRangeWire(event.startsAt, event.endsAt))
     }
 
     private fun parsePositiveRange(range: CalendarRangeWire): Pair<OffsetDateTime, OffsetDateTime>? {
