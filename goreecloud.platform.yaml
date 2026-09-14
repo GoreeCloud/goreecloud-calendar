@@ -1,0 +1,176 @@
+schema_version: "0.3"
+
+component:
+  type: application
+  id: goreecloud-calendar
+  product_name: GoreeCloud Calendar
+  repository: GoreeCloud/goreecloud-calendar
+
+lifecycle: development
+version: "0.1.0-dev"
+
+supported_platforms:
+  - web
+  - server
+  - android
+
+api:
+  versions:
+    - v1
+  endpoints:
+    - name: event-view
+      url: /api/v1/events
+      purpose: Authorized versioned Calendar event-view contract.
+    - name: busy-time
+      url: /api/v1/busy-time
+      purpose: Privacy-minimized authorized busy-time contract.
+
+platform_systems:
+  manager:
+    result: applicable-blocked
+    version: null
+    evidence:
+      - README.md
+      - clients/android/README.md
+    notes: No accepted GoreeCloud Manager registration, operational visibility, lifecycle control, or administrative integration is established for Calendar.
+
+  privacy_shield:
+    result: applicable-blocked
+    version: null
+    evidence:
+      - README.md
+      - docs/tasks-integration-contract.md
+      - clients/android/README.md
+      - clients/android/app/src/main/java/com/goreecloud/calendar/CalendarIdentityBinding.kt
+    notes: The Tasks busy-time contract is privacy-minimized and the Android client remains network-disabled, but accepted Privacy Shield purpose, consent, minimization policy, runtime enforcement, revocation, retention, and production validation are not established.
+
+  wardveil_security:
+    result: applicable-blocked
+    version: null
+    evidence:
+      - README.md
+      - clients/android/README.md
+      - clients/android/app/src/main/java/com/goreecloud/calendar/CalendarIdentityBinding.kt
+    notes: Calendar has HTTPS/cross-origin/ETag source safeguards plus fail-closed native Identity/read contracts, while Android network and Calendar Provider permissions remain disabled. Accepted Wardveil Security runtime integration and production security evidence are not established.
+
+  everkeep:
+    result: applicable-blocked
+    version: null
+    evidence:
+      - README.md
+      - clients/android/README.md
+    notes: CalDAV/iCalendar provide standards-based portability, but accepted Everkeep backup, clean-target restore, recovery lineage, failure reconciliation, and production recovery evidence are not established.
+
+  glaze_ui:
+    result: applicable-migration-required
+    version: "1.4.0"
+    evidence:
+      - README.md
+      - clients/android/README.md
+      - clients/android/app/src/main/java/com/goreecloud/calendar/GlazeCalendarTheme.kt
+    notes: The Android Development client targets current Stable GLAZE UI V1.4 / 1.4.0 at exact Stable revision 84cb3db4884042f0fa25ed6d475a127fb110f596. Optical Engine, Reduced Transparency, Increased Contrast, representative-device, accessibility, and human-visual acceptance remain explicitly unaccepted; V1.4.1 human/manual/physical-device qualification remains separate.
+
+  mesh:
+    result: applicable-blocked
+    version: null
+    evidence:
+      - README.md
+      - docs/tasks-integration-contract.md
+    notes: Calendar uses versioned first-party application contracts but has no accepted GoreeCloud Mesh registration, service identity, capability publication, event transport, or runtime integration.
+    capabilities: []
+    dependencies:
+      - goreecloud-tasks
+    published_events: []
+    consumed_events: []
+
+  identity:
+    result: applicable-blocked
+    version: null
+    evidence:
+      - clients/android/README.md
+      - clients/android/app/src/main/java/com/goreecloud/calendar/CalendarIdentityBinding.kt
+      - clients/android/app/src/test/java/com/goreecloud/calendar/CalendarIdentityBindingTest.kt
+    notes: The Android client has a source-ready fail-closed principal/audience/lifetime acceptance contract pinned to the canonical GoreeCloud Identity native-session source contract, but no deployed native Identity registration, credential exchange, session runtime, protected credential storage, or accepted production Identity authority exists.
+
+  sync:
+    result: applicable-blocked
+    version: null
+    evidence:
+      - README.md
+      - clients/android/README.md
+    notes: Radicale/CalDAV remains the authoritative event store and future native offline/cache reconciliation is planned, but no accepted GoreeCloud Sync change tracking, version coordination, conflict handling, authorized replication, offline-resume, or cross-device runtime integration is established. Sync remains separate from Everkeep backup/recovery and from the optional Android Calendar Provider bridge.
+
+health:
+  health_endpoint: null
+  readiness_endpoint: null
+
+continuity:
+  backup:
+    required: true
+    requirements:
+      - Define the production Calendar backup scope and preserve authorized CalDAV/iCalendar data plus required configuration under accepted Everkeep policy.
+      - Keep GoreeCloud Sync replication distinct from backup truth and recovery evidence.
+  restore:
+    required: true
+    requirements:
+      - Validate authorized clean-target restoration against the authoritative CalDAV service without creating a second application-only calendar authority.
+      - Preserve recurrence/timezone semantics, ETag/conflict behavior, Identity ownership, privacy boundaries, recovery lineage, and failure reconciliation.
+  export:
+    required: true
+    requirements:
+      - Preserve user-controlled iCalendar portability for supported event semantics without exporting reusable credentials or unrelated account state.
+  portability:
+    required: true
+    requirements:
+      - Preserve CalDAV/iCalendar interoperability and explicit migration/conflict behavior across supported clients.
+      - Keep Android Calendar Provider integration optional, permission-bound, and non-authoritative.
+      - Fail closed or preserve opaque semantics that are not yet safely supported rather than silently rewriting them.
+
+external_dependencies:
+  - name: Radicale
+    purpose: Authoritative CalDAV calendar service.
+    required: true
+    version_constraint: "CalDAV-compatible"
+  - name: Android platform
+    purpose: Native Android application runtime and optional Calendar Provider bridge.
+    required: true
+    version_constraint: ">=29"
+
+compatibility:
+  platform_contract: "0.3"
+  glaze_ui_required: "1.4.0"
+  requires:
+    - goreecloud-platform-contract==0.3
+    - glaze-ui==1.4.0
+    - caldav
+    - android-api>=29
+  provides:
+    - goreecloud-calendar-event-view-v1
+    - goreecloud-calendar-busy-time-v1
+
+evidence:
+  acceptance_tests: []
+  release: []
+
+conformance:
+  status: nonconformant
+  validated_at: null
+  evidence:
+    - README.md
+    - docs/product-foundation.md
+    - docs/tasks-integration-contract.md
+    - clients/android/README.md
+    - clients/android/app/src/main/java/com/goreecloud/calendar/GlazeCalendarTheme.kt
+    - clients/android/app/src/main/java/com/goreecloud/calendar/CalendarIdentityBinding.kt
+    - clients/android/app/src/test/java/com/goreecloud/calendar/CalendarIdentityBindingTest.kt
+  blockers:
+    - GoreeCloud Manager registration and operational acceptance are not established.
+    - Privacy Shield runtime integration and production privacy acceptance are not established.
+    - Wardveil Security runtime integration and production security acceptance are not established.
+    - Everkeep backup, clean-target restore, recovery lineage, and production recovery acceptance are not established.
+    - GLAZE UI V1.4 source adoption is in progress; rendered, accessibility, adaptive/form-factor, representative-device, performance, rollback, release, production, and applicable V1.4.1 human/manual/device acceptance remain outstanding.
+    - GoreeCloud Mesh registration, capability publication, event transport, and runtime acceptance are not established.
+    - GoreeCloud Identity native registration, credential exchange, session runtime, protected credential storage, and production acceptance are not established.
+    - GoreeCloud Sync change tracking, version/conflict reconciliation, authorized replication, offline-resume, and cross-device continuity acceptance are not established.
+    - Android network transport, offline cache/reconciliation, background sync, event mutations, complete recurrence/timezone/attendee/alarm interoperability, and Calendar Provider bridge remain separately blocked Development capabilities.
+    - Production DAV credentials, deployment, monitoring, protected signing/provenance, Release Candidate approval, and Stable qualification remain outstanding.
