@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-closed validation for GoreeCloud Calendar Android GLAZE UI V1.4 adoption."""
+"""Fail-closed validation for GoreeCloud Calendar Android GLAZE UI V1.4.x adoption."""
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -10,8 +10,9 @@ RESPONSE_CONTRACT = ROOT / "clients/android/app/src/main/java/com/goreecloud/cal
 MANIFEST = ROOT / "clients/android/app/src/main/AndroidManifest.xml"
 DOC = ROOT / "docs/glaze-ui-v1.4-android-adoption.md"
 ANDROID_README = ROOT / "clients/android/README.md"
-VERSION = "1.4.0"
-REVISION = "84cb3db4884042f0fa25ed6d475a127fb110f596"
+VERSION = "1.4.1"
+REVISION = "4fab9da0fad2e5c974e0e66ec88632c61745751c"
+ROLLBACK_VERSION = "1.4.0"
 
 
 def require(text: str, fragment: str, label: str) -> None:
@@ -35,6 +36,7 @@ def main() -> None:
 
     require(theme, f'VERSION = "{VERSION}"', "theme")
     require(theme, f'REFERENCE_REVISION = "{REVISION}"', "theme")
+    require(theme, f'ROLLBACK_VERSION = "{ROLLBACK_VERSION}"', "theme")
     require(theme, 'ADOPTION_STATE = "ADOPTION_IN_PROGRESS"', "theme")
     for flag in (
         "OPTICAL_ENGINE_ACCEPTED",
@@ -47,6 +49,7 @@ def main() -> None:
     require(main_source, "GlazeCalendarTheme", "MainActivity")
     require(doc, "Radicale/CalDAV remains the sole authoritative calendar service", "documentation")
     require(doc, REVISION, "documentation")
+    require(doc, "Shared V1.4.1 qualification does not establish Calendar-local acceptance", "documentation")
 
     require(read_contract, 'responseAcceptance = CalendarReadContractState.SOURCE_READY', "read contract")
     require(read_contract, 'nativeIdentitySession = CalendarReadContractState.IDENTITY_BLOCKED', "read contract")
@@ -78,11 +81,13 @@ def main() -> None:
 
     require(android_readme, "Calendar response acceptance", "Android README")
     require(android_readme, "no network authority", "Android README")
+    require(android_readme, "GLAZE UI V1.4.1", "Android README")
 
     print(
-        "Calendar Android GLAZE UI V1.4 adoption validated: "
-        f"version={VERSION} revision={REVISION} responseAcceptance=source-ready "
-        "network=false providerAuthority=false conformance=false production=false"
+        "Calendar Android GLAZE UI V1.4.1 adoption validated: "
+        f"version={VERSION} revision={REVISION} rollback={ROLLBACK_VERSION} "
+        "responseAcceptance=source-ready network=false providerAuthority=false "
+        "consumerAcceptance=false production=false"
     )
 
 
