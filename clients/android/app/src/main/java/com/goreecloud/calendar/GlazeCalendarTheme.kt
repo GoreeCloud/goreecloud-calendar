@@ -7,12 +7,14 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalConfiguration
 
-/** Repository-local Android adoption boundary for current Stable GLAZE UI V1.4. */
+/** Repository-local Android adoption boundary for current Stable GLAZE UI V1.4.1. */
 object GlazeCalendarContract {
-    const val VERSION = "1.4.0"
-    const val REFERENCE_REVISION = "84cb3db4884042f0fa25ed6d475a127fb110f596"
+    const val VERSION = "1.4.1"
+    const val REFERENCE_REVISION = "4fab9da0fad2e5c974e0e66ec88632c61745751c"
+    const val ROLLBACK_VERSION = "1.4.0"
     const val ADOPTION_STATE = "ADOPTION_IN_PROGRESS"
 
+    // Shared V1.4.1 qualification does not establish Calendar-local acceptance.
     const val OPTICAL_ENGINE_ACCEPTED = false
     const val REDUCED_TRANSPARENCY_ACCEPTED = false
     const val INCREASED_CONTRAST_ACCEPTED = false
